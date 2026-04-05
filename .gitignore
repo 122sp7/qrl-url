@@ -60,3 +60,5 @@ htmlcov/
 
 #Ignore vscode AI rules
 .github\instructions\codacy.instructions.md
+
+Copilot-Processing.md
