@@ -10,6 +10,20 @@ copilot_context:
   - Task-specific: .github/prompts/*.prompt.md
   - Path-scoped: .github/instructions/*.instructions.md
 
+ddd_reference:
+  source: Implementing Domain-Driven Design (Vaughn Vernon)
+  knowledge_base: docs/ddd/
+  files:
+    - docs/ddd/ubiquitous-language.md   # canonical term definitions
+    - docs/ddd/bounded-contexts.md      # 4 context boundaries
+    - docs/ddd/subdomains.md            # Core / Supporting / Generic
+    - docs/ddd/context-map.md           # OHS-ACL, Customer-Supplier
+    - docs/ddd/aggregates.md            # TradingSession, AccountState, MarketSnapshot
+    - docs/ddd/domain-events.md         # OrderEvent, TradeEvent, BalanceEvent, MarketDepthEvent
+    - docs/ddd/domain-services.md       # QrlGuards, SlippageAnalyzer, ValuationService
+    - docs/ddd/application-services.md  # all use cases and port interfaces
+    - docs/ddd/repositories.md          # exchange-backed + cache-backed repos
+
 max_file_length: 4000
 split_large_files: true
 
