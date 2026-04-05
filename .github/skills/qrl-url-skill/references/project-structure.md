@@ -1,6 +1,7 @@
 # Directory Structure
 
 ```
+.serena/project.yml (152 lines)
 main.py (96 lines)
 src/__init__.py (1 lines)
 src/app/__init__.py (1 lines)
