@@ -572,6 +572,25 @@ async def dashboard(request: Request) -> HTMLResponse:
 
 ```
 
+## File: src/app/interfaces/http/pages/static/js/domain/order.js
+```javascript
+(() => {
+  const cancelOrder = async (cfg, orderId) => {
+    if (!orderId) throw new Error("orderId required");
+    const url = `${cfg.cancelOrderBase || "/api/trading/orders"}/${orderId}/cancel`;
+    const resp = await fetch(url, { method: "POST" });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const detail = data.detail || JSON.stringify(data);
+      throw new Error(detail);
+    }
+    return data;
+  };
+
+  window.orderDomain = { cancelOrder };
+})();
+```
+
 ## File: src/app/interfaces/http/pages/static/js/domain/price.js
 ```javascript
 
@@ -3186,23 +3205,366 @@ def get_exchange_factory() -> ExchangeServiceFactory:
     return build_exchange_factory()
 ```
 
-## File: src/app/interfaces/http/pages/static/js/domain/order.js
+## File: src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js
 ```javascript
 (() => {
-  const cancelOrder = async (cfg, orderId) => {
-    if (!orderId) throw new Error("orderId required");
-    const url = `${cfg.cancelOrderBase || "/api/trading/orders"}/${orderId}/cancel`;
-    const resp = await fetch(url, { method: "POST" });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const detail = data.detail || JSON.stringify(data);
-      throw new Error(detail);
-    }
-    return data;
+  const $ = (id) => document.getElementById(id);
+  const setText = (id, v = "") => {
+    const el = $(id);
+    if (el) el.textContent = v;
   };
 
-  window.orderDomain = { cancelOrder };
+  const chartEl = $("klineChart");
+  const chart =
+    window.Chart && chartEl
+      ? new Chart(chartEl.getContext("2d"), {
+          type: "line",
+          data: { labels: [], datasets: [{ data: [], borderColor: "#2196f3", fill: false, tension: 0.2 }] },
+        })
+      : { data: { labels: [], datasets: [{ data: [] }] }, update() {} };
+
+  const setPrice = (d) => {
+    setText("price-error", "");
+    setText("bid", d?.bid ?? "--");
+    setText("ask", d?.ask ?? "--");
+    setText("last", d?.last ?? "--");
+    const raw = d?.timestamp;
+    const parsed = typeof raw === "number" || typeof raw === "string" ? new Date(raw) : new Date();
+    setText("timestamp", parsed.toISOString());
+  };
+
+  const setKlines = (items = []) => {
+    chart.data.labels = items.map((k) => new Date(k.timestamp).toLocaleTimeString());
+    chart.data.datasets[0].data = items.map((k) => Number(k.close));
+    chart.update();
+  };
+
+  const setBalances = (payload = {}) => {
+    setText("balance-error", "");
+    const balances = payload.balances || [];
+    const byAsset = (asset) => balances.find((b) => b.asset === asset) || { free: "--", locked: "--" };
+    const qrl = byAsset("QRL");
+    const usdt = byAsset("USDT");
+    setText("bal-qrl-free", qrl.free);
+    setText("bal-qrl-locked", qrl.locked);
+    setText("bal-usdt-free", usdt.free);
+    setText("bal-usdt-locked", usdt.locked);
+  };
+
+  const normalizeDepth = (item) => (Array.isArray(item) ? { price: item[0], qty: item[1] } : { price: item?.price ?? item?.p ?? "--", qty: item?.quantity ?? item?.q ?? "--" });
+
+  const setDepth = (payload = {}) => {
+    setText("depth-error", "");
+    const bidsEl = $("depth-bids");
+    const asksEl = $("depth-asks");
+    const build = (items = []) =>
+      items
+        .slice(0, 10)
+        .map((entry) => {
+          const { price, qty } = normalizeDepth(entry);
+          return `<li><span class="price">${price}</span><span class="qty">${qty}</span></li>`;
+        })
+        .join("");
+    if (bidsEl) bidsEl.innerHTML = build(payload.bids);
+    if (asksEl) asksEl.innerHTML = build(payload.asks);
+  };
+
+  const normalizeTrade = (t = {}) => {
+    const side = t.side ?? (t.isBuyerMaker === true ? "SELL" : t.isBuyerMaker === false ? "BUY" : "--");
+    const tsRaw = t.timestamp ?? t.time ?? Date.now();
+    return { price: t.price ?? t.p ?? "--", qty: t.quantity ?? t.q ?? "--", side, ts: typeof tsRaw === "string" ? tsRaw : new Date(tsRaw).toISOString() };
+  };
+
+  const setTrades = (payload = []) => {
+    setText("trades-error", "");
+    const el = $("trades-list");
+    if (!el) return;
+    el.innerHTML = payload
+      .slice(0, 20)
+      .map((t) => {
+        const n = normalizeTrade(t);
+        return `<li><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="ts">${n.ts}</span></li>`;
+      })
+      .join("");
+  };
+
+  const formatAmount = (price, qty, quote) => {
+    if (quote !== undefined && quote !== null) return quote;
+    const p = Number(price);
+    const q = Number(qty);
+    return Number.isFinite(p) && Number.isFinite(q) ? (p * q).toFixed(4) : "--";
+  };
+
+  const normalizeOrder = (o = {}) => {
+    const status = (o.status ?? "--").toString().toUpperCase();
+    const price = o.price ?? o.limit_price ?? o.avg_price ?? "--";
+    const qty = o.quantity ?? o.orig_qty ?? "--";
+    const quote =
+      o.cumulative_quote_quantity ??
+      o.cum_quote_quantity ??
+      o.cumulative_quote_qty ??
+      o.cummulativeQuoteQty ??
+      undefined;
+    return {
+      side: o.side ?? "--",
+      status,
+      price,
+      qty,
+      amount: formatAmount(price, qty, quote),
+      id: o.order_id ?? o.orderId ?? "--",
+      canCancel: !["CANCELED", "FILLED", "REJECTED", "EXPIRED"].includes(status),
+    };
+  };
+
+  const setOrders = (payload = []) => {
+    setText("orders-error", "");
+    const el = $("orders-list");
+    if (!el) return;
+    const header =
+      '<li class="orders-header"><span class="id">訂單ID</span><span class="side">方向</span><span class="price">價格</span><span class="qty">數量</span><span class="amount">金額</span><span class="status">狀態</span><span class="action">操作</span></li>';
+    el.innerHTML =
+      header +
+      payload
+        .slice(0, 20)
+        .map((o) => {
+          const n = normalizeOrder(o);
+          const action = n.canCancel
+            ? `<button class="order-cancel" data-order-id="${n.id}" aria-label="取消訂單 ${n.id}">取消</button>`
+            : `<span class="status-label">${n.status}</span>`;
+          return `<li data-order-id="${n.id}"><span class="id">${n.id}</span><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="amount">${n.amount}</span><span class="status">${n.status}</span><span class="action">${action}</span></li>`;
+        })
+        .join("");
+  };
+
+  window.dashboardUI = { setText, setPrice, setKlines, setBalances, setDepth, setTrades, setOrders };
 })();
+```
+
+## File: src/app/interfaces/http/pages/static/js/pages/dashboard.js
+```javascript
+(() => {
+  const cfg = window.dashboardConfig || {};
+  const ui = window.dashboardUI || {};
+  if (!ui.setPrice || !ui.setText) return;
+
+  const load = async (url) => {
+    const resp = await fetch(url);
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch (_err) {
+      data = {};
+    }
+    return { ok: resp.ok, data };
+  };
+
+  const err = (id, detail, fallback) => ui.setText(id, detail || fallback);
+
+  async function refresh() {
+    try {
+      const [price, kline, bal, depth, trades, orders] = await Promise.all([
+        load(cfg.priceUrl),
+        load(cfg.klineUrl),
+        load(cfg.balanceUrl),
+        load(cfg.depthUrl),
+        load(cfg.tradesUrl),
+        load(cfg.ordersUrl),
+      ]);
+      price.ok ? ui.setPrice(price.data) : err("price-error", price.data.detail, "價格取得失敗");
+      kline.ok && ui.setKlines(kline.data);
+      bal.ok ? ui.setBalances(bal.data) : err("balance-error", bal.data.detail, "餘額取得失敗");
+      depth.ok ? ui.setDepth(depth.data) : err("depth-error", depth.data.detail, "Depth 取得失敗");
+      trades.ok ? ui.setTrades(trades.data) : err("trades-error", trades.data.detail, "Trades 取得失敗");
+      orders.ok ? ui.setOrders(orders.data) : err("orders-error", orders.data.detail, "Orders 取得失敗");
+    } catch (ex) {
+      ["price", "balance", "depth", "trades", "orders"].forEach((key) => err(`${key}-error`, null, "連線錯誤"));
+      console.error(ex);
+    }
+  }
+
+  const wireSideToggle = () => {
+    document.querySelectorAll(".side-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".side-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const sideInput = document.querySelector('input[name="side"]');
+        if (sideInput) sideInput.value = btn.dataset.side;
+      });
+    });
+  };
+
+  const wireOrderForm = () => {
+    const form = document.getElementById("orderForm");
+    const resultEl = document.getElementById("orderResult");
+    if (!form || !resultEl) return;
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        symbol: "QRLUSDT",
+        side: form.side.value,
+        order_type: form.order_type.value,
+        quantity: form.quantity.value,
+        price: form.price.value || null,
+        time_in_force: form.time_in_force.value,
+      };
+      resultEl.textContent = "送出中...";
+      try {
+        const resp = await fetch(cfg.orderUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json().catch(() => ({}));
+        resultEl.textContent = resp.ok
+          ? `成功: orderId=${data.order_id || data.orderId || "N/A"}`
+          : `失敗: ${data.detail || JSON.stringify(data)}`;
+      } catch (ex) {
+        resultEl.textContent = `錯誤: ${ex}`;
+      }
+    });
+  };
+
+  const cancelOrder = async (orderId, button) => {
+    if (!orderId || !cfg.ordersUrl) return;
+    const url = `${cfg.ordersUrl}/${encodeURIComponent(orderId)}/cancel`;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "取消中...";
+    try {
+      const resp = await fetch(url, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        err("orders-error", data.detail, "取消失敗");
+      } else {
+        ui.setText("orders-error", "");
+        refresh();
+      }
+    } catch (ex) {
+      err("orders-error", String(ex), "取消失敗");
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText || "取消";
+    }
+  };
+
+  const wireOrderActions = () => {
+    const list = document.getElementById("orders-list");
+    if (!list) return;
+    list.addEventListener("click", (event) => {
+      const button = event.target.closest(".order-cancel");
+      if (!button) return;
+      const orderId = button.dataset.orderId;
+      cancelOrder(orderId, button);
+    });
+  };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    wireSideToggle();
+    wireOrderForm();
+    wireOrderActions();
+    refresh();
+    setInterval(refresh, cfg.refreshMs || 10000);
+  });
+})();
+```
+
+## File: src/app/interfaces/http/pages/templates/dashboard/index.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>QRL/USDT Dashboard</title>
+<link rel="stylesheet" href="/static/css/dashboard.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<a href="#maincontent" class="skip-link">Skip to content</a>
+<main id="maincontent" class="dashboard-grid">
+<div class="card price-card">
+<div class="price-row"><span class="label">買價</span><span id="bid" class="value">--</span></div>
+<div class="price-row"><span class="label">賣價</span><span id="ask" class="value">--</span></div>
+<div class="price-row"><span class="label">最新價</span><span id="last" class="value">--</span></div>
+<div class="price-row"><span class="label">更新時間</span><span id="timestamp" class="value">--</span></div>
+<div class="price-row error" id="price-error" aria-live="polite"></div>
+</div>
+<div class="card kline-card">
+<canvas id="klineChart" height="240"></canvas>
+</div>
+<div class="card depth-card">
+<h2>深度</h2>
+<div class="vertical-stack">
+<div class="label">賣盤</div>
+<ul id="depth-asks" class="depth-list"></ul>
+<div class="label">買盤</div>
+<ul id="depth-bids" class="depth-list"></ul>
+</div>
+<div class="price-row error" id="depth-error" aria-live="polite"></div>
+</div>
+<div class="card trades-card">
+<h2>近期成交</h2>
+<ul id="trades-list" class="trades-list"></ul>
+<div class="price-row error" id="trades-error" aria-live="polite"></div>
+</div>
+<div class="card orders-card">
+<h2>我的訂單</h2>
+<ul id="orders-list" class="orders-list"></ul>
+<div class="price-row error" id="orders-error" aria-live="polite"></div>
+</div>
+<div class="card balance-card">
+<h2>餘額</h2>
+<div class="price-row"><span class="label">QRL 可用</span><span id="bal-qrl-free" class="value">--</span></div>
+<div class="price-row"><span class="label">QRL 凍結</span><span id="bal-qrl-locked" class="value">--</span></div>
+<div class="price-row"><span class="label">USDT 可用</span><span id="bal-usdt-free" class="value">--</span></div>
+<div class="price-row"><span class="label">USDT 凍結</span><span id="bal-usdt-locked" class="value">--</span></div>
+<div class="price-row error" id="balance-error" aria-live="polite"></div>
+</div>
+<div class="card order-card">
+<h2>下單</h2>
+<form id="orderForm">
+<div class="form-row">
+<label>方向</label>
+<div class="side-toggle" role="group" aria-label="Side">
+<button type="button" data-side="BUY" class="side-btn active">買入</button>
+<button type="button" data-side="SELL" class="side-btn">賣出</button>
+</div>
+<input type="hidden" name="side" value="BUY" />
+</div>
+<div class="form-row">
+<label>類型</label>
+<select name="order_type">
+<option value="LIMIT">LIMIT</option>
+<option value="MARKET">MARKET</option>
+</select>
+</div>
+<div class="form-row">
+<label>數量</label>
+<input name="quantity" type="number" step="0.0001" required />
+</div>
+<div class="form-row">
+<label>價格</label>
+<input name="price" type="number" step="0.0001" />
+</div>
+<div class="form-row">
+<label>有效期限</label>
+<select name="time_in_force">
+<option value="GTC">GTC</option>
+<option value="IOC">IOC</option>
+<option value="FOK">FOK</option>
+</select>
+</div>
+<button type="submit">送出</button>
+<div id="orderResult" class="order-result"></div>
+</form>
+</div>
+</main>
+<script id="dashboard-config" type="application/json">{{ dashboard_config | tojson }}</script>
+<script src="/static/js/pages/dashboard-config.js" defer></script>
+<script src="/static/js/domain/order.js" defer></script>
+<script src="/static/js/pages/dashboard-renderers.js" defer></script>
+<script src="/static/js/pages/dashboard.js" defer></script>
+</body>
+</html>
 ```
 
 ## File: src/app/interfaces/tasks/entrypoints.py
@@ -4385,368 +4747,6 @@ async def trigger_allocation() -> AllocationResponse:
 async def trigger_allocation_api() -> AllocationResponse:
     """API-aligned alias to trigger allocation under the /api/tasks namespace."""
     return await _trigger_allocation()
-```
-
-## File: src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js
-```javascript
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const setText = (id, v = "") => {
-    const el = $(id);
-    if (el) el.textContent = v;
-  };
-
-  const chartEl = $("klineChart");
-  const chart =
-    window.Chart && chartEl
-      ? new Chart(chartEl.getContext("2d"), {
-          type: "line",
-          data: { labels: [], datasets: [{ data: [], borderColor: "#2196f3", fill: false, tension: 0.2 }] },
-        })
-      : { data: { labels: [], datasets: [{ data: [] }] }, update() {} };
-
-  const setPrice = (d) => {
-    setText("price-error", "");
-    setText("bid", d?.bid ?? "--");
-    setText("ask", d?.ask ?? "--");
-    setText("last", d?.last ?? "--");
-    const raw = d?.timestamp;
-    const parsed = typeof raw === "number" || typeof raw === "string" ? new Date(raw) : new Date();
-    setText("timestamp", parsed.toISOString());
-  };
-
-  const setKlines = (items = []) => {
-    chart.data.labels = items.map((k) => new Date(k.timestamp).toLocaleTimeString());
-    chart.data.datasets[0].data = items.map((k) => Number(k.close));
-    chart.update();
-  };
-
-  const setBalances = (payload = {}) => {
-    setText("balance-error", "");
-    const balances = payload.balances || [];
-    const byAsset = (asset) => balances.find((b) => b.asset === asset) || { free: "--", locked: "--" };
-    const qrl = byAsset("QRL");
-    const usdt = byAsset("USDT");
-    setText("bal-qrl-free", qrl.free);
-    setText("bal-qrl-locked", qrl.locked);
-    setText("bal-usdt-free", usdt.free);
-    setText("bal-usdt-locked", usdt.locked);
-  };
-
-  const normalizeDepth = (item) => (Array.isArray(item) ? { price: item[0], qty: item[1] } : { price: item?.price ?? item?.p ?? "--", qty: item?.quantity ?? item?.q ?? "--" });
-
-  const setDepth = (payload = {}) => {
-    setText("depth-error", "");
-    const bidsEl = $("depth-bids");
-    const asksEl = $("depth-asks");
-    const build = (items = []) =>
-      items
-        .slice(0, 10)
-        .map((entry) => {
-          const { price, qty } = normalizeDepth(entry);
-          return `<li><span class="price">${price}</span><span class="qty">${qty}</span></li>`;
-        })
-        .join("");
-    if (bidsEl) bidsEl.innerHTML = build(payload.bids);
-    if (asksEl) asksEl.innerHTML = build(payload.asks);
-  };
-
-  const normalizeTrade = (t = {}) => {
-    const side = t.side ?? (t.isBuyerMaker === true ? "SELL" : t.isBuyerMaker === false ? "BUY" : "--");
-    const tsRaw = t.timestamp ?? t.time ?? Date.now();
-    return { price: t.price ?? t.p ?? "--", qty: t.quantity ?? t.q ?? "--", side, ts: typeof tsRaw === "string" ? tsRaw : new Date(tsRaw).toISOString() };
-  };
-
-  const setTrades = (payload = []) => {
-    setText("trades-error", "");
-    const el = $("trades-list");
-    if (!el) return;
-    el.innerHTML = payload
-      .slice(0, 20)
-      .map((t) => {
-        const n = normalizeTrade(t);
-        return `<li><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="ts">${n.ts}</span></li>`;
-      })
-      .join("");
-  };
-
-  const formatAmount = (price, qty, quote) => {
-    if (quote !== undefined && quote !== null) return quote;
-    const p = Number(price);
-    const q = Number(qty);
-    return Number.isFinite(p) && Number.isFinite(q) ? (p * q).toFixed(4) : "--";
-  };
-
-  const normalizeOrder = (o = {}) => {
-    const status = (o.status ?? "--").toString().toUpperCase();
-    const price = o.price ?? o.limit_price ?? o.avg_price ?? "--";
-    const qty = o.quantity ?? o.orig_qty ?? "--";
-    const quote =
-      o.cumulative_quote_quantity ??
-      o.cum_quote_quantity ??
-      o.cumulative_quote_qty ??
-      o.cummulativeQuoteQty ??
-      undefined;
-    return {
-      side: o.side ?? "--",
-      status,
-      price,
-      qty,
-      amount: formatAmount(price, qty, quote),
-      id: o.order_id ?? o.orderId ?? "--",
-      canCancel: !["CANCELED", "FILLED", "REJECTED", "EXPIRED"].includes(status),
-    };
-  };
-
-  const setOrders = (payload = []) => {
-    setText("orders-error", "");
-    const el = $("orders-list");
-    if (!el) return;
-    const header =
-      '<li class="orders-header"><span class="id">訂單ID</span><span class="side">方向</span><span class="price">價格</span><span class="qty">數量</span><span class="amount">金額</span><span class="status">狀態</span><span class="action">操作</span></li>';
-    el.innerHTML =
-      header +
-      payload
-        .slice(0, 20)
-        .map((o) => {
-          const n = normalizeOrder(o);
-          const action = n.canCancel
-            ? `<button class="order-cancel" data-order-id="${n.id}" aria-label="取消訂單 ${n.id}">取消</button>`
-            : `<span class="status-label">${n.status}</span>`;
-          return `<li data-order-id="${n.id}"><span class="id">${n.id}</span><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="amount">${n.amount}</span><span class="status">${n.status}</span><span class="action">${action}</span></li>`;
-        })
-        .join("");
-  };
-
-  window.dashboardUI = { setText, setPrice, setKlines, setBalances, setDepth, setTrades, setOrders };
-})();
-```
-
-## File: src/app/interfaces/http/pages/static/js/pages/dashboard.js
-```javascript
-(() => {
-  const cfg = window.dashboardConfig || {};
-  const ui = window.dashboardUI || {};
-  if (!ui.setPrice || !ui.setText) return;
-
-  const load = async (url) => {
-    const resp = await fetch(url);
-    let data = {};
-    try {
-      data = await resp.json();
-    } catch (_err) {
-      data = {};
-    }
-    return { ok: resp.ok, data };
-  };
-
-  const err = (id, detail, fallback) => ui.setText(id, detail || fallback);
-
-  async function refresh() {
-    try {
-      const [price, kline, bal, depth, trades, orders] = await Promise.all([
-        load(cfg.priceUrl),
-        load(cfg.klineUrl),
-        load(cfg.balanceUrl),
-        load(cfg.depthUrl),
-        load(cfg.tradesUrl),
-        load(cfg.ordersUrl),
-      ]);
-      price.ok ? ui.setPrice(price.data) : err("price-error", price.data.detail, "價格取得失敗");
-      kline.ok && ui.setKlines(kline.data);
-      bal.ok ? ui.setBalances(bal.data) : err("balance-error", bal.data.detail, "餘額取得失敗");
-      depth.ok ? ui.setDepth(depth.data) : err("depth-error", depth.data.detail, "Depth 取得失敗");
-      trades.ok ? ui.setTrades(trades.data) : err("trades-error", trades.data.detail, "Trades 取得失敗");
-      orders.ok ? ui.setOrders(orders.data) : err("orders-error", orders.data.detail, "Orders 取得失敗");
-    } catch (ex) {
-      ["price", "balance", "depth", "trades", "orders"].forEach((key) => err(`${key}-error`, null, "連線錯誤"));
-      console.error(ex);
-    }
-  }
-
-  const wireSideToggle = () => {
-    document.querySelectorAll(".side-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".side-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        const sideInput = document.querySelector('input[name="side"]');
-        if (sideInput) sideInput.value = btn.dataset.side;
-      });
-    });
-  };
-
-  const wireOrderForm = () => {
-    const form = document.getElementById("orderForm");
-    const resultEl = document.getElementById("orderResult");
-    if (!form || !resultEl) return;
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = {
-        symbol: "QRLUSDT",
-        side: form.side.value,
-        order_type: form.order_type.value,
-        quantity: form.quantity.value,
-        price: form.price.value || null,
-        time_in_force: form.time_in_force.value,
-      };
-      resultEl.textContent = "送出中...";
-      try {
-        const resp = await fetch(cfg.orderUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await resp.json().catch(() => ({}));
-        resultEl.textContent = resp.ok
-          ? `成功: orderId=${data.order_id || data.orderId || "N/A"}`
-          : `失敗: ${data.detail || JSON.stringify(data)}`;
-      } catch (ex) {
-        resultEl.textContent = `錯誤: ${ex}`;
-      }
-    });
-  };
-
-  const cancelOrder = async (orderId, button) => {
-    if (!orderId || !cfg.ordersUrl) return;
-    const url = `${cfg.ordersUrl}/${encodeURIComponent(orderId)}/cancel`;
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = "取消中...";
-    try {
-      const resp = await fetch(url, { method: "POST" });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        err("orders-error", data.detail, "取消失敗");
-      } else {
-        ui.setText("orders-error", "");
-        refresh();
-      }
-    } catch (ex) {
-      err("orders-error", String(ex), "取消失敗");
-    } finally {
-      button.disabled = false;
-      button.textContent = originalText || "取消";
-    }
-  };
-
-  const wireOrderActions = () => {
-    const list = document.getElementById("orders-list");
-    if (!list) return;
-    list.addEventListener("click", (event) => {
-      const button = event.target.closest(".order-cancel");
-      if (!button) return;
-      const orderId = button.dataset.orderId;
-      cancelOrder(orderId, button);
-    });
-  };
-
-  document.addEventListener("DOMContentLoaded", () => {
-    wireSideToggle();
-    wireOrderForm();
-    wireOrderActions();
-    refresh();
-    setInterval(refresh, cfg.refreshMs || 10000);
-  });
-})();
-```
-
-## File: src/app/interfaces/http/pages/templates/dashboard/index.html
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>QRL/USDT Dashboard</title>
-<link rel="stylesheet" href="/static/css/dashboard.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-<a href="#maincontent" class="skip-link">Skip to content</a>
-<main id="maincontent" class="dashboard-grid">
-<div class="card price-card">
-<div class="price-row"><span class="label">買價</span><span id="bid" class="value">--</span></div>
-<div class="price-row"><span class="label">賣價</span><span id="ask" class="value">--</span></div>
-<div class="price-row"><span class="label">最新價</span><span id="last" class="value">--</span></div>
-<div class="price-row"><span class="label">更新時間</span><span id="timestamp" class="value">--</span></div>
-<div class="price-row error" id="price-error" aria-live="polite"></div>
-</div>
-<div class="card kline-card">
-<canvas id="klineChart" height="240"></canvas>
-</div>
-<div class="card depth-card">
-<h2>深度</h2>
-<div class="vertical-stack">
-<div class="label">賣盤</div>
-<ul id="depth-asks" class="depth-list"></ul>
-<div class="label">買盤</div>
-<ul id="depth-bids" class="depth-list"></ul>
-</div>
-<div class="price-row error" id="depth-error" aria-live="polite"></div>
-</div>
-<div class="card trades-card">
-<h2>近期成交</h2>
-<ul id="trades-list" class="trades-list"></ul>
-<div class="price-row error" id="trades-error" aria-live="polite"></div>
-</div>
-<div class="card orders-card">
-<h2>我的訂單</h2>
-<ul id="orders-list" class="orders-list"></ul>
-<div class="price-row error" id="orders-error" aria-live="polite"></div>
-</div>
-<div class="card balance-card">
-<h2>餘額</h2>
-<div class="price-row"><span class="label">QRL 可用</span><span id="bal-qrl-free" class="value">--</span></div>
-<div class="price-row"><span class="label">QRL 凍結</span><span id="bal-qrl-locked" class="value">--</span></div>
-<div class="price-row"><span class="label">USDT 可用</span><span id="bal-usdt-free" class="value">--</span></div>
-<div class="price-row"><span class="label">USDT 凍結</span><span id="bal-usdt-locked" class="value">--</span></div>
-<div class="price-row error" id="balance-error" aria-live="polite"></div>
-</div>
-<div class="card order-card">
-<h2>下單</h2>
-<form id="orderForm">
-<div class="form-row">
-<label>方向</label>
-<div class="side-toggle" role="group" aria-label="Side">
-<button type="button" data-side="BUY" class="side-btn active">買入</button>
-<button type="button" data-side="SELL" class="side-btn">賣出</button>
-</div>
-<input type="hidden" name="side" value="BUY" />
-</div>
-<div class="form-row">
-<label>類型</label>
-<select name="order_type">
-<option value="LIMIT">LIMIT</option>
-<option value="MARKET">MARKET</option>
-</select>
-</div>
-<div class="form-row">
-<label>數量</label>
-<input name="quantity" type="number" step="0.0001" required />
-</div>
-<div class="form-row">
-<label>價格</label>
-<input name="price" type="number" step="0.0001" />
-</div>
-<div class="form-row">
-<label>有效期限</label>
-<select name="time_in_force">
-<option value="GTC">GTC</option>
-<option value="IOC">IOC</option>
-<option value="FOK">FOK</option>
-</select>
-</div>
-<button type="submit">送出</button>
-<div id="orderResult" class="order-result"></div>
-</form>
-</div>
-</main>
-<script id="dashboard-config" type="application/json">{{ dashboard_config | tojson }}</script>
-<script src="/static/js/pages/dashboard-config.js" defer></script>
-<script src="/static/js/domain/order.js" defer></script>
-<script src="/static/js/pages/dashboard-renderers.js" defer></script>
-<script src="/static/js/pages/dashboard.js" defer></script>
-</body>
-</html>
 ```
 
 ## File: src/app/application/trading/use_cases/list_trades.py

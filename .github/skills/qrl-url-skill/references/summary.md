@@ -44,8 +44,8 @@ This skill contains the following reference files:
 | Python | 160 | 4,740 |
 | JavaScript | 11 | 299 |
 | YAML | 1 | 152 |
-| TOML | 1 | 38 |
 | HTML | 1 | 95 |
+| TOML | 1 | 38 |
 
 **Largest files:**
 - `src/app/infrastructure/exchange/mexc/factories.py` (241 lines)
