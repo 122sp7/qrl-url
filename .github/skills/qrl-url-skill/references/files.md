@@ -37,28 +37,6 @@ Mappers for translating market data payloads into domain market objects.
 """
 ```
 
-## File: src/app/application/market/mappers/mexc.py
-```python
-from decimal import Decimal
-from datetime import datetime, timezone
-
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-
-
-def map_ws_ticker_event_to_domain(event: dict) -> Ticker:
-    """Map MEXC WS ticker event to Ticker VO."""
-    return Ticker(
-        symbol=Symbol(str(event.get("symbol", "QRLUSDT"))),
-        last_price=Decimal(str(event.get("last", "0"))),
-        bid_price=Decimal(str(event.get("bidPrice", "0"))),
-        ask_price=Decimal(str(event.get("askPrice", "0"))),
-        ts=datetime.fromtimestamp(
-            int(event.get("ts", 0)) / 1000, tz=timezone.utc
-        ),
-    )
-```
-
 ## File: src/app/application/market/qrl/__init__.py
 ```python
 # QRL market application use cases package
@@ -74,35 +52,6 @@ def map_ws_ticker_event_to_domain(event: dict) -> Ticker:
 from .exchange_gateway import ExchangeGateway
 
 __all__ = ["ExchangeGateway"]
-```
-
-## File: src/app/application/ports/exchange_gateway.py
-```python
-from typing import AsyncIterator, Protocol
-
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.events.order_event import OrderEvent
-from app.domain.events.balance_event import BalanceEvent
-from app.domain.value_objects.symbol import Symbol
-
-
-class ExchangeGateway(Protocol):
-    """Application port for streaming market/account data."""
-
-    async def subscribe_market_depth(
-        self, symbol: Symbol
-    ) -> AsyncIterator[MarketDepthEvent]:
-        ...
-
-    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
-        ...
-
-    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
-        ...
-
-    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
-        ...
 ```
 
 ## File: src/app/application/system/__init__.py
@@ -143,61 +92,6 @@ class PingUseCase:
 """
 Mappers for translating external MEXC payloads into domain trading objects.
 """
-```
-
-## File: src/app/application/trading/mappers/mexc.py
-```python
-from decimal import Decimal
-from datetime import datetime, timezone
-
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.order_status import OrderStatus
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.domain.value_objects.trade_id import TradeId
-
-
-def map_rest_order_dto_to_domain(dto: dict) -> Order:
-    """Map MEXC REST order DTO (primitives) to Order entity."""
-    return Order(
-        order_id=OrderId(str(dto.get("orderId", ""))),
-        symbol=Symbol(str(dto.get("symbol", "QRLUSDT"))),
-        side=Side(str(dto.get("side", "")).upper()),
-        status=OrderStatus(str(dto.get("status", "")).upper()),
-        price=Decimal(str(dto.get("price", "0"))),
-        quantity=Quantity(Decimal(str(dto.get("origQty", "0")))),
-        created_at=Timestamp(
-            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=timezone.utc)
-        ),
-        updated_at=Timestamp(
-            datetime.fromtimestamp(
-                int(dto.get("updateTime", dto.get("time", 0))) / 1000, tz=timezone.utc
-            )
-        )
-        if dto.get("updateTime")
-        else None,
-    )
-
-
-def map_rest_trade_dto_to_domain(dto: dict) -> Trade:
-    """Map MEXC REST trade DTO to Trade entity."""
-    return Trade(
-        trade_id=TradeId(str(dto.get("id", ""))),
-        order_id=OrderId(str(dto.get("orderId", ""))),
-        symbol=Symbol(str(dto.get("symbol", "QRLUSDT"))),
-        side=Side(str(dto.get("side", "")).upper()),
-        price=Decimal(str(dto.get("price", "0"))),
-        quantity=Decimal(str(dto.get("qty", "0"))),
-        fee=Decimal(str(dto["commission"])) if dto.get("commission") is not None else None,
-        fee_asset=str(dto["commissionAsset"]) if dto.get("commissionAsset") else None,
-        timestamp=Timestamp(
-            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=timezone.utc)
-        ),
-    )
 ```
 
 ## File: src/app/application/trading/qrl/__init__.py
@@ -308,22 +202,6 @@ from src.app.domain.entities.trade import Trade
 __all__ = ["Account", "Kline", "Order", "OrderBookLevel", "Trade"]
 ```
 
-## File: src/app/domain/entities/account.py
-```python
-from dataclasses import dataclass
-from src.app.domain.value_objects.balance import Balance
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass
-class Account:
-    """Spot account snapshot."""
-
-    can_trade: bool
-    update_time: Timestamp
-    balances: list[Balance]
-```
-
 ## File: src/app/domain/entities/kline.py
 ```python
 from dataclasses import dataclass
@@ -399,34 +277,6 @@ class BalanceEvent:
     timestamp: int
 ```
 
-## File: src/app/domain/events/market_depth_event.py
-```python
-from dataclasses import dataclass
-from typing import List, Tuple
-
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-
-
-@dataclass(frozen=True)
-class MarketDepthEvent:
-    """
-    Order book depth snapshot/update at a point in time.
-
-    Notes:
-        - Bids/asks are sorted by price on the exchange side.
-        - Versions allow consumers to detect gaps and request replay.
-    """
-
-    symbol: Symbol
-    bids: List[Tuple[Price, Quantity]]
-    asks: List[Tuple[Price, Quantity]]
-    event_type: str | None
-    from_version: str | None
-    to_version: str | None
-```
-
 ## File: src/app/domain/events/order_event.py
 ```python
 from dataclasses import dataclass
@@ -470,41 +320,6 @@ class TradeEvent:
     quantity: Quantity
     is_buyer_maker: bool
     timestamp: int
-```
-
-## File: src/app/domain/value_objects/__init__.py
-```python
-"""Domain Value Objects for QRL/USDT scope."""
-
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.kline_interval import KlineInterval
-from src.app.domain.value_objects.order_side import OrderSide
-from src.app.domain.value_objects.order_status import OrderStatus
-from src.app.domain.value_objects.price import Price
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.domain.value_objects.trade_id import TradeId
-from src.app.domain.value_objects.kline import KLine
-from src.app.domain.value_objects.sub_account_id import SubAccountId
-
-__all__ = [
-    "OrderId",
-    "OrderStatus",
-    "OrderSide",
-    "KlineInterval",
-    "Price",
-    "KLine",
-    "Quantity",
-    "Side",
-    "Symbol",
-    "Ticker",
-    "Timestamp",
-    "TradeId",
-    "SubAccountId",
-]
 ```
 
 ## File: src/app/domain/value_objects/api_key.py
@@ -560,94 +375,6 @@ class Balance:
             raise ValueError("Balance amounts cannot be negative")
 ```
 
-## File: src/app/domain/value_objects/client_order_id.py
-```python
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class ClientOrderId:
-    """Client-supplied idempotency key for orders."""
-
-    value: str
-
-    def __post_init__(self):
-        if not self.value:
-            raise ValueError("Client order id cannot be empty")
-        if len(self.value) > 32:
-            raise ValueError("Client order id must be 32 characters or fewer")
-```
-
-## File: src/app/domain/value_objects/kline_interval.py
-```python
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class KlineInterval:
-    """Supported MEXC spot kline intervals for QRL/USDT."""
-
-    value: str
-
-    _allowed = {
-        "1m",
-        "5m",
-        "15m",
-        "30m",
-        "1h",
-        "4h",
-        "1d",
-    }
-
-    def __post_init__(self):
-        if self.value not in self._allowed:
-            raise ValueError(f"KlineInterval must be one of {sorted(self._allowed)}")
-```
-
-## File: src/app/domain/value_objects/kline.py
-```python
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
-
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass(frozen=True)
-class KLine:
-    """Single candlestick for a trading pair."""
-
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
-    volume: Decimal
-    interval: str
-    timestamp: Timestamp
-
-    def __post_init__(self):
-        if min(self.open, self.high, self.low, self.close) < 0:
-            raise ValueError("KLine prices cannot be negative")
-        if self.volume < 0:
-            raise ValueError("KLine volume cannot be negative")
-        if not self.interval:
-            raise ValueError("KLine interval is required")
-
-    @classmethod
-    def from_raw(
-        cls,
-        open_price: Decimal,
-        high: Decimal,
-        low: Decimal,
-        close: Decimal,
-        volume: Decimal,
-        interval: str,
-        timestamp_ms: int,
-    ) -> "KLine":
-        ts = Timestamp(datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc))
-        return cls(open=open_price, high=high, low=low, close=close, volume=volume, interval=interval, timestamp=ts)
-```
-
 ## File: src/app/domain/value_objects/order_id.py
 ```python
 from dataclasses import dataclass
@@ -671,202 +398,6 @@ from src.app.domain.value_objects.side import Side
 
 class OrderSide(Side):
     """Alias for Side specific to order semantics."""
-```
-
-## File: src/app/domain/value_objects/order_status.py
-```python
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class OrderStatus:
-    """Order status with a minimal allowed set."""
-
-    value: str
-
-    _allowed = {
-        "NEW",
-        "PARTIALLY_FILLED",
-        "FILLED",
-        "CANCELED",
-        "REJECTED",
-    }
-
-    def __post_init__(self):
-        if self.value not in self._allowed:
-            raise ValueError(f"OrderStatus must be one of {sorted(self._allowed)}")
-```
-
-## File: src/app/domain/value_objects/order_type.py
-```python
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class OrderType:
-    """Supported MEXC order types."""
-
-    value: str
-
-    _allowed = {"LIMIT", "MARKET"}
-
-    def __post_init__(self):
-        if self.value not in self._allowed:
-            raise ValueError(f"OrderType must be one of {sorted(self._allowed)}")
-```
-
-## File: src/app/domain/value_objects/price.py
-```python
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
-
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass(frozen=True)
-class Price:
-    """Quote for a trading pair with bid/ask/last and timestamp."""
-
-    bid: Decimal
-    ask: Decimal
-    last: Decimal
-    timestamp: Timestamp
-
-    def __post_init__(self):
-        if self.bid <= 0 or self.ask <= 0 or self.last <= 0:
-            raise ValueError("Price values must be positive")
-
-    @classmethod
-    def from_single(cls, value: Decimal, ts: datetime | None = None) -> "Price":
-        """Construct a Price when only a single quote is available."""
-        stamp = Timestamp(ts or datetime.now(timezone.utc))
-        return cls(bid=value, ask=value, last=value, timestamp=stamp)
-```
-
-## File: src/app/domain/value_objects/qrl_price.py
-```python
-from __future__ import annotations
-
-from decimal import Decimal, ROUND_DOWN, getcontext
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.app.domain.value_objects.qrl_quantity import QrlQuantity
-
-getcontext().prec = 28
-
-
-class QrlPrice:
-    """
-    QRL/USDT 專用價格 Value Object
-    - 不可變
-    - 強制 tick size
-    """
-
-    TICK_SIZE = Decimal("0.0001")
-    MIN_PRICE = TICK_SIZE
-
-    def __init__(self, value: Decimal | str | float):
-        self._value = self._normalize(Decimal(str(value)))
-
-    @staticmethod
-    def _normalize(value: Decimal) -> Decimal:
-        if value <= 0:
-            raise ValueError("QRL price must be > 0")
-
-        normalized = (value // QrlPrice.TICK_SIZE) * QrlPrice.TICK_SIZE
-
-        if normalized < QrlPrice.MIN_PRICE:
-            raise ValueError("QRL price below minimum tick size")
-
-        return normalized.quantize(QrlPrice.TICK_SIZE, rounding=ROUND_DOWN)
-
-    @property
-    def value(self) -> Decimal:
-        return self._value
-
-    def __str__(self) -> str:
-        return format(self._value, "f")
-
-    def __repr__(self) -> str:
-        return f"QrlPrice({self._value})"
-
-    def multiply(self, quantity: "QrlQuantity") -> Decimal:
-        return (self._value * quantity.value).quantize(
-            Decimal("0.00000001"), rounding=ROUND_DOWN
-        )
-```
-
-## File: src/app/domain/value_objects/qrl_quantity.py
-```python
-from __future__ import annotations
-
-from decimal import Decimal, ROUND_DOWN, getcontext
-
-getcontext().prec = 28
-
-
-class QrlQuantity:
-    """
-    QRL 專用數量 Value Object
-    - 不可變
-    - 防 fat finger
-    """
-
-    STEP_SIZE = Decimal("1")
-    MIN_QTY = Decimal("1")
-    MAX_QTY = Decimal("1000000")
-
-    def __init__(self, value: Decimal | str | int | float):
-        self._value = self._normalize(Decimal(str(value)))
-
-    @staticmethod
-    def _normalize(value: Decimal) -> Decimal:
-        if value <= 0:
-            raise ValueError("QRL quantity must be > 0")
-
-        normalized = (value // QrlQuantity.STEP_SIZE) * QrlQuantity.STEP_SIZE
-
-        if normalized < QrlQuantity.MIN_QTY:
-            raise ValueError("QRL quantity below minimum")
-
-        if normalized > QrlQuantity.MAX_QTY:
-            raise ValueError("QRL quantity exceeds safety limit")
-
-        return normalized.quantize(QrlQuantity.STEP_SIZE, rounding=ROUND_DOWN)
-
-    @property
-    def value(self) -> Decimal:
-        return self._value
-
-    def __str__(self) -> str:
-        return format(self._value, "f")
-
-    def __repr__(self) -> str:
-        return f"QrlQuantity({self._value})"
-```
-
-## File: src/app/domain/value_objects/qrl_usdt_pair.py
-```python
-class QrlUsdtPair:
-    """QRL/USDT 專用交易對，不允許動態建構."""
-
-    SYMBOL = "QRLUSDT"
-    BASE = "QRL"
-    QUOTE = "USDT"
-
-    @classmethod
-    def symbol(cls) -> str:
-        return cls.SYMBOL
-
-    @classmethod
-    def base(cls) -> str:
-        return cls.BASE
-
-    @classmethod
-    def quote(cls) -> str:
-        return cls.QUOTE
 ```
 
 ## File: src/app/domain/value_objects/quantity.py
@@ -935,69 +466,6 @@ class Symbol:
             raise ValueError("Symbol must be QRL/USDT")
 ```
 
-## File: src/app/domain/value_objects/ticker.py
-```python
-from dataclasses import dataclass
-from decimal import Decimal
-from datetime import datetime, timezone
-
-from src.app.domain.value_objects.symbol import Symbol
-
-
-@dataclass(frozen=True)
-class Ticker:
-    """Minimal ticker snapshot for QRL/USDT."""
-
-    symbol: Symbol
-    last_price: Decimal
-    bid_price: Decimal
-    ask_price: Decimal
-    ts: datetime
-
-    def __post_init__(self):
-        if self.last_price <= 0 or self.bid_price <= 0 or self.ask_price <= 0:
-            raise ValueError("Ticker prices must be positive")
-        if self.bid_price > self.ask_price:
-            raise ValueError("Bid price cannot exceed ask price")
-        if self.ts.tzinfo is None:
-            object.__setattr__(self, "ts", self.ts.replace(tzinfo=timezone.utc))
-```
-
-## File: src/app/domain/value_objects/time_in_force.py
-```python
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class TimeInForce:
-    """Time in force constraints for limit orders."""
-
-    value: str
-
-    _allowed = {"GTC", "IOC", "FOK"}
-
-    def __post_init__(self):
-        if self.value not in self._allowed:
-            raise ValueError(f"TimeInForce must be one of {sorted(self._allowed)}")
-```
-
-## File: src/app/domain/value_objects/timestamp.py
-```python
-from dataclasses import dataclass
-from datetime import datetime, timezone
-
-
-@dataclass(frozen=True)
-class Timestamp:
-    """UTC timestamp wrapper."""
-
-    value: datetime
-
-    def __post_init__(self):
-        if self.value.tzinfo is None:
-            object.__setattr__(self, "value", self.value.replace(tzinfo=timezone.utc))
-```
-
 ## File: src/app/domain/value_objects/trade_id.py
 ```python
 from dataclasses import dataclass
@@ -1037,57 +505,6 @@ config = Config()
 ## File: src/app/infrastructure/exchange/__init__.py
 ```python
 # Technical exchange integrations live here.
-```
-
-## File: src/app/infrastructure/exchange/mexc_api_client.py
-```python
-from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Any, Iterable
-
-from src.app.domain.entities.trading_pair import TradingPair
-from src.app.domain.value_objects.kline import KLine
-from src.app.domain.value_objects.price import Price
-from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.infrastructure.exchange.mexc.rest_client import MexcRestClient
-
-
-class MexcApiClient:
-    """High-level client that maps REST responses to domain value objects."""
-
-    def __init__(self, rest_client: MexcRestClient):
-        self._rest_client = rest_client
-
-    async def __aenter__(self) -> "MexcApiClient":
-        await self._rest_client.__aenter__()
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self._rest_client.__aexit__(exc_type, exc, tb)
-
-    async def get_price(self, pair: TradingPair) -> Price:
-        payload = await self._rest_client.ticker_24h(symbol=pair.symbol)
-        bid = Decimal(payload.get("bidPrice", "0"))
-        ask = Decimal(payload.get("askPrice", "0"))
-        last = Decimal(payload.get("lastPrice", payload.get("last", "0")))
-        ts_value = payload.get("closeTime") or payload.get("close_time") or int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-        timestamp = Timestamp(datetime.fromtimestamp(int(ts_value) / 1000, tz=timezone.utc))
-        return Price(bid=bid, ask=ask, last=last, timestamp=timestamp)
-
-    async def get_klines(self, pair: TradingPair, interval: str, limit: int = 100) -> list[KLine]:
-        raw_list = await self._rest_client.klines(symbol=pair.symbol, interval=interval, limit=limit)
-        klines: list[KLine] = []
-        for item in raw_list:
-            if not isinstance(item, Iterable):
-                continue
-            open_time = int(item[0])
-            open_price = Decimal(item[1])
-            high = Decimal(item[2])
-            low = Decimal(item[3])
-            close = Decimal(item[4])
-            volume = Decimal(item[5])
-            klines.append(KLine.from_raw(open_price, high, low, close, volume, interval, open_time))
-        return klines
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/__init__.py
@@ -1160,59 +577,6 @@ def depth_proto_to_domain(
     )
 ```
 
-## File: src/app/infrastructure/exchange/mexc/adapters/market_event_adapter.py
-```python
-from typing import AsyncIterator
-
-from app.application.ports.exchange_gateway import ExchangeGateway
-from app.domain.events.balance_event import BalanceEvent
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.order_event import OrderEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import (
-    PrivateAccountV3Api_pb2,
-    PrivateOrdersV3Api_pb2,
-    PublicAggreDepthsV3Api_pb2,
-    PublicDealsV3Api_pb2,
-)
-from app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
-from .balance_mapper import balance_proto_to_domain
-from .order_mapper import order_proto_to_domain
-from .trade_mapper import trade_proto_to_domain
-from .depth_mapper import depth_proto_to_domain
-
-
-class MexcExchangeGateway(ExchangeGateway):
-    """Infrastructure adapter that translates MEXC WS protobuf into domain events."""
-
-    def __init__(self, ws_client: MexcWebSocketClient):
-        self._ws = ws_client
-
-    async def subscribe_market_depth(
-        self, symbol: Symbol
-    ) -> AsyncIterator[MarketDepthEvent]:
-        async for proto in self._ws.subscribe("depth", symbol.value):
-            if isinstance(proto, PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api):
-                yield depth_proto_to_domain(symbol, proto)
-
-    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
-        async for proto in self._ws.subscribe("deals", symbol.value):
-            if isinstance(proto, PublicDealsV3Api_pb2.PublicDealsV3Api):
-                for item in proto.deals:
-                    yield trade_proto_to_domain(symbol, item)
-
-    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
-        async for proto in self._ws.subscribe("orders"):
-            if isinstance(proto, PrivateOrdersV3Api_pb2.PrivateOrdersV3Api):
-                yield order_proto_to_domain(proto)
-
-    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
-        async for proto in self._ws.subscribe("balances"):
-            if isinstance(proto, PrivateAccountV3Api_pb2.PrivateAccountV3Api):
-                yield balance_proto_to_domain(proto)
-```
-
 ## File: src/app/infrastructure/exchange/mexc/adapters/order_mapper.py
 ```python
 from app.domain.events.order_event import OrderEvent
@@ -1247,718 +611,9 @@ def order_proto_to_domain(proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api) -> O
     )
 ```
 
-## File: src/app/infrastructure/exchange/mexc/adapters/trade_mapper.py
-```python
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.domain.value_objects.trade_id import TradeId
-from app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
-
-
-def trade_proto_to_domain(
-    symbol: Symbol, proto: PublicDealsV3Api_pb2.PublicDealsV3ApiItem
-) -> TradeEvent:
-    # tradeType: 1=buy, 2=sell in MEXC WS push; treat 2 as maker sell
-    is_buyer_maker = proto.tradeType == 2
-    return TradeEvent(
-        trade_id=TradeId(str(proto.time)),
-        symbol=symbol,
-        price=Price(float(proto.price)),
-        quantity=Quantity(float(proto.quantity)),
-        is_buyer_maker=is_buyer_maker,
-        timestamp=proto.time,
-    )
-```
-
 ## File: src/app/infrastructure/exchange/mexc/generated/__init__.py
 ```python
 """Generated protobuf modules for MEXC WebSocket V3 APIs."""
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PrivateAccountV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PrivateAccountV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PrivateAccountV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19PrivateAccountV3Api.proto\"\xba\x01\n\x13PrivateAccountV3Api\x12\x11\n\tvcoinName\x18\x01 \x01(\t\x12\x0e\n\x06\x63oinId\x18\x02 \x01(\t\x12\x15\n\rbalanceAmount\x18\x03 \x01(\t\x12\x1b\n\x13\x62\x61lanceAmountChange\x18\x04 \x01(\t\x12\x14\n\x0c\x66rozenAmount\x18\x05 \x01(\t\x12\x1a\n\x12\x66rozenAmountChange\x18\x06 \x01(\t\x12\x0c\n\x04type\x18\x07 \x01(\t\x12\x0c\n\x04time\x18\x08 \x01(\x03\x42<\n\x1c\x63om.mxc.push.common.protobufB\x18PrivateAccountV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PrivateAccountV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\030PrivateAccountV3ApiProtoH\001P\001'
-  _globals['_PRIVATEACCOUNTV3API']._serialized_start=30
-  _globals['_PRIVATEACCOUNTV3API']._serialized_end=216
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PrivateDealsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PrivateDealsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PrivateDealsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17PrivateDealsV3Api.proto\"\xec\x01\n\x11PrivateDealsV3Api\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x0e\n\x06\x61mount\x18\x03 \x01(\t\x12\x11\n\ttradeType\x18\x04 \x01(\x05\x12\x0f\n\x07isMaker\x18\x05 \x01(\x08\x12\x13\n\x0bisSelfTrade\x18\x06 \x01(\x08\x12\x0f\n\x07tradeId\x18\x07 \x01(\t\x12\x15\n\rclientOrderId\x18\x08 \x01(\t\x12\x0f\n\x07orderId\x18\t \x01(\t\x12\x11\n\tfeeAmount\x18\n \x01(\t\x12\x13\n\x0b\x66\x65\x65\x43urrency\x18\x0b \x01(\t\x12\x0c\n\x04time\x18\x0c \x01(\x03\x42:\n\x1c\x63om.mxc.push.common.protobufB\x16PrivateDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PrivateDealsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\026PrivateDealsV3ApiProtoH\001P\001'
-  _globals['_PRIVATEDEALSV3API']._serialized_start=28
-  _globals['_PRIVATEDEALSV3API']._serialized_end=264
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PrivateOrdersV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PrivateOrdersV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PrivateOrdersV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18PrivateOrdersV3Api.proto\"\xe8\x05\n\x12PrivateOrdersV3Api\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08\x63lientId\x18\x02 \x01(\t\x12\r\n\x05price\x18\x03 \x01(\t\x12\x10\n\x08quantity\x18\x04 \x01(\t\x12\x0e\n\x06\x61mount\x18\x05 \x01(\t\x12\x10\n\x08\x61vgPrice\x18\x06 \x01(\t\x12\x11\n\torderType\x18\x07 \x01(\x05\x12\x11\n\ttradeType\x18\x08 \x01(\x05\x12\x0f\n\x07isMaker\x18\t \x01(\x08\x12\x14\n\x0cremainAmount\x18\n \x01(\t\x12\x16\n\x0eremainQuantity\x18\x0b \x01(\t\x12\x1d\n\x10lastDealQuantity\x18\x0c \x01(\tH\x00\x88\x01\x01\x12\x1a\n\x12\x63umulativeQuantity\x18\r \x01(\t\x12\x18\n\x10\x63umulativeAmount\x18\x0e \x01(\t\x12\x0e\n\x06status\x18\x0f \x01(\x05\x12\x12\n\ncreateTime\x18\x10 \x01(\x03\x12\x13\n\x06market\x18\x11 \x01(\tH\x01\x88\x01\x01\x12\x18\n\x0btriggerType\x18\x12 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0ctriggerPrice\x18\x13 \x01(\tH\x03\x88\x01\x01\x12\x12\n\x05state\x18\x14 \x01(\x05H\x04\x88\x01\x01\x12\x12\n\x05ocoId\x18\x15 \x01(\tH\x05\x88\x01\x01\x12\x18\n\x0brouteFactor\x18\x16 \x01(\tH\x06\x88\x01\x01\x12\x15\n\x08symbolId\x18\x17 \x01(\tH\x07\x88\x01\x01\x12\x15\n\x08marketId\x18\x18 \x01(\tH\x08\x88\x01\x01\x12\x1d\n\x10marketCurrencyId\x18\x19 \x01(\tH\t\x88\x01\x01\x12\x17\n\ncurrencyId\x18\x1a \x01(\tH\n\x88\x01\x01\x42\x13\n\x11_lastDealQuantityB\t\n\x07_marketB\x0e\n\x0c_triggerTypeB\x0f\n\r_triggerPriceB\x08\n\x06_stateB\x08\n\x06_ocoIdB\x0e\n\x0c_routeFactorB\x0b\n\t_symbolIdB\x0b\n\t_marketIdB\x13\n\x11_marketCurrencyIdB\r\n\x0b_currencyIdB;\n\x1c\x63om.mxc.push.common.protobufB\x17PrivateOrdersV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PrivateOrdersV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\027PrivateOrdersV3ApiProtoH\001P\001'
-  _globals['_PRIVATEORDERSV3API']._serialized_start=29
-  _globals['_PRIVATEORDERSV3API']._serialized_end=773
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreBookTickerV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicAggreBookTickerV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicAggreBookTickerV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n PublicAggreBookTickerV3Api.proto\"j\n\x1aPublicAggreBookTickerV3Api\x12\x10\n\x08\x62idPrice\x18\x01 \x01(\t\x12\x13\n\x0b\x62idQuantity\x18\x02 \x01(\t\x12\x10\n\x08\x61skPrice\x18\x03 \x01(\t\x12\x13\n\x0b\x61skQuantity\x18\x04 \x01(\tBC\n\x1c\x63om.mxc.push.common.protobufB\x1fPublicAggreBookTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicAggreBookTickerV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\037PublicAggreBookTickerV3ApiProtoH\001P\001'
-  _globals['_PUBLICAGGREBOOKTICKERV3API']._serialized_start=36
-  _globals['_PUBLICAGGREBOOKTICKERV3API']._serialized_end=142
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreDealsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicAggreDealsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicAggreDealsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicAggreDealsV3Api.proto\"U\n\x15PublicAggreDealsV3Api\x12)\n\x05\x64\x65\x61ls\x18\x01 \x03(\x0b\x32\x1a.PublicAggreDealsV3ApiItem\x12\x11\n\teventType\x18\x02 \x01(\t\"]\n\x19PublicAggreDealsV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x11\n\ttradeType\x18\x03 \x01(\x05\x12\x0c\n\x04time\x18\x04 \x01(\x03\x42>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicAggreDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicAggreDealsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\032PublicAggreDealsV3ApiProtoH\001P\001'
-  _globals['_PUBLICAGGREDEALSV3API']._serialized_start=31
-  _globals['_PUBLICAGGREDEALSV3API']._serialized_end=116
-  _globals['_PUBLICAGGREDEALSV3APIITEM']._serialized_start=118
-  _globals['_PUBLICAGGREDEALSV3APIITEM']._serialized_end=211
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreDepthsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicAggreDepthsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicAggreDepthsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicAggreDepthsV3Api.proto\"\xa7\x01\n\x16PublicAggreDepthsV3Api\x12(\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1a.PublicAggreDepthV3ApiItem\x12(\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1a.PublicAggreDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x13\n\x0b\x66romVersion\x18\x04 \x01(\t\x12\x11\n\ttoVersion\x18\x05 \x01(\t\"<\n\x19PublicAggreDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicAggreDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicAggreDepthsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\033PublicAggreDepthsV3ApiProtoH\001P\001'
-  _globals['_PUBLICAGGREDEPTHSV3API']._serialized_start=33
-  _globals['_PUBLICAGGREDEPTHSV3API']._serialized_end=200
-  _globals['_PUBLICAGGREDEPTHV3APIITEM']._serialized_start=202
-  _globals['_PUBLICAGGREDEPTHV3APIITEM']._serialized_end=262
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicBookTickerBatchV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicBookTickerBatchV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicBookTickerBatchV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-import PublicBookTickerV3Api_pb2 as PublicBookTickerV3Api__pb2
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n PublicBookTickerBatchV3Api.proto\x1a\x1bPublicBookTickerV3Api.proto\"C\n\x1aPublicBookTickerBatchV3Api\x12%\n\x05items\x18\x01 \x03(\x0b\x32\x16.PublicBookTickerV3ApiBC\n\x1c\x63om.mxc.push.common.protobufB\x1fPublicBookTickerBatchV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicBookTickerBatchV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\037PublicBookTickerBatchV3ApiProtoH\001P\001'
-  _globals['_PUBLICBOOKTICKERBATCHV3API']._serialized_start=65
-  _globals['_PUBLICBOOKTICKERBATCHV3API']._serialized_end=132
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicBookTickerV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicBookTickerV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicBookTickerV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicBookTickerV3Api.proto\"e\n\x15PublicBookTickerV3Api\x12\x10\n\x08\x62idPrice\x18\x01 \x01(\t\x12\x13\n\x0b\x62idQuantity\x18\x02 \x01(\t\x12\x10\n\x08\x61skPrice\x18\x03 \x01(\t\x12\x13\n\x0b\x61skQuantity\x18\x04 \x01(\tB>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicBookTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicBookTickerV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\032PublicBookTickerV3ApiProtoH\001P\001'
-  _globals['_PUBLICBOOKTICKERV3API']._serialized_start=31
-  _globals['_PUBLICBOOKTICKERV3API']._serialized_end=132
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicDealsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicDealsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicDealsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16PublicDealsV3Api.proto\"K\n\x10PublicDealsV3Api\x12$\n\x05\x64\x65\x61ls\x18\x01 \x03(\x0b\x32\x15.PublicDealsV3ApiItem\x12\x11\n\teventType\x18\x02 \x01(\t\"X\n\x14PublicDealsV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x11\n\ttradeType\x18\x03 \x01(\x05\x12\x0c\n\x04time\x18\x04 \x01(\x03\x42\x39\n\x1c\x63om.mxc.push.common.protobufB\x15PublicDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicDealsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\025PublicDealsV3ApiProtoH\001P\001'
-  _globals['_PUBLICDEALSV3API']._serialized_start=26
-  _globals['_PUBLICDEALSV3API']._serialized_end=101
-  _globals['_PUBLICDEALSV3APIITEM']._serialized_start=103
-  _globals['_PUBLICDEALSV3APIITEM']._serialized_end=191
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicIncreaseDepthsBatchV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicIncreaseDepthsBatchV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicIncreaseDepthsBatchV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-import PublicIncreaseDepthsV3Api_pb2 as PublicIncreaseDepthsV3Api__pb2
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$PublicIncreaseDepthsBatchV3Api.proto\x1a\x1fPublicIncreaseDepthsV3Api.proto\"^\n\x1ePublicIncreaseDepthsBatchV3Api\x12)\n\x05items\x18\x01 \x03(\x0b\x32\x1a.PublicIncreaseDepthsV3Api\x12\x11\n\teventType\x18\x02 \x01(\tBG\n\x1c\x63om.mxc.push.common.protobufB#PublicIncreaseDepthsBatchV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicIncreaseDepthsBatchV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB#PublicIncreaseDepthsBatchV3ApiProtoH\001P\001'
-  _globals['_PUBLICINCREASEDEPTHSBATCHV3API']._serialized_start=73
-  _globals['_PUBLICINCREASEDEPTHSBATCHV3API']._serialized_end=167
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicIncreaseDepthsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicIncreaseDepthsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicIncreaseDepthsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fPublicIncreaseDepthsV3Api.proto\"\x99\x01\n\x19PublicIncreaseDepthsV3Api\x12+\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1d.PublicIncreaseDepthV3ApiItem\x12+\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1d.PublicIncreaseDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t\"?\n\x1cPublicIncreaseDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tBB\n\x1c\x63om.mxc.push.common.protobufB\x1ePublicIncreaseDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicIncreaseDepthsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\036PublicIncreaseDepthsV3ApiProtoH\001P\001'
-  _globals['_PUBLICINCREASEDEPTHSV3API']._serialized_start=36
-  _globals['_PUBLICINCREASEDEPTHSV3API']._serialized_end=189
-  _globals['_PUBLICINCREASEDEPTHV3APIITEM']._serialized_start=191
-  _globals['_PUBLICINCREASEDEPTHV3APIITEM']._serialized_end=254
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicLimitDepthsV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicLimitDepthsV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicLimitDepthsV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicLimitDepthsV3Api.proto\"\x90\x01\n\x16PublicLimitDepthsV3Api\x12(\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1a.PublicLimitDepthV3ApiItem\x12(\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1a.PublicLimitDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t\"<\n\x19PublicLimitDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicLimitDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicLimitDepthsV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\033PublicLimitDepthsV3ApiProtoH\001P\001'
-  _globals['_PUBLICLIMITDEPTHSV3API']._serialized_start=33
-  _globals['_PUBLICLIMITDEPTHSV3API']._serialized_end=177
-  _globals['_PUBLICLIMITDEPTHV3APIITEM']._serialized_start=179
-  _globals['_PUBLICLIMITDEPTHV3APIITEM']._serialized_end=239
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicMiniTickersV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicMiniTickersV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicMiniTickersV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-import PublicMiniTickerV3Api_pb2 as PublicMiniTickerV3Api__pb2
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicMiniTickersV3Api.proto\x1a\x1bPublicMiniTickerV3Api.proto\"?\n\x16PublicMiniTickersV3Api\x12%\n\x05items\x18\x01 \x03(\x0b\x32\x16.PublicMiniTickerV3ApiB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicMiniTickersV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicMiniTickersV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\033PublicMiniTickersV3ApiProtoH\001P\001'
-  _globals['_PUBLICMINITICKERSV3API']._serialized_start=61
-  _globals['_PUBLICMINITICKERSV3API']._serialized_end=124
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicMiniTickerV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicMiniTickerV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicMiniTickerV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicMiniTickerV3Api.proto\"\xf4\x01\n\x15PublicMiniTickerV3Api\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\r\n\x05price\x18\x02 \x01(\t\x12\x0c\n\x04rate\x18\x03 \x01(\t\x12\x11\n\tzonedRate\x18\x04 \x01(\t\x12\x0c\n\x04high\x18\x05 \x01(\t\x12\x0b\n\x03low\x18\x06 \x01(\t\x12\x0e\n\x06volume\x18\x07 \x01(\t\x12\x10\n\x08quantity\x18\x08 \x01(\t\x12\x15\n\rlastCloseRate\x18\t \x01(\t\x12\x1a\n\x12lastCloseZonedRate\x18\n \x01(\t\x12\x15\n\rlastCloseHigh\x18\x0b \x01(\t\x12\x14\n\x0clastCloseLow\x18\x0c \x01(\tB>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicMiniTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicMiniTickerV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\032PublicMiniTickerV3ApiProtoH\001P\001'
-  _globals['_PUBLICMINITICKERV3API']._serialized_start=32
-  _globals['_PUBLICMINITICKERV3API']._serialized_end=276
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PublicSpotKlineV3Api_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PublicSpotKlineV3Api.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PublicSpotKlineV3Api.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aPublicSpotKlineV3Api.proto\"\xc7\x01\n\x14PublicSpotKlineV3Api\x12\x10\n\x08interval\x18\x01 \x01(\t\x12\x13\n\x0bwindowStart\x18\x02 \x01(\x03\x12\x14\n\x0copeningPrice\x18\x03 \x01(\t\x12\x14\n\x0c\x63losingPrice\x18\x04 \x01(\t\x12\x14\n\x0chighestPrice\x18\x05 \x01(\t\x12\x13\n\x0blowestPrice\x18\x06 \x01(\t\x12\x0e\n\x06volume\x18\x07 \x01(\t\x12\x0e\n\x06\x61mount\x18\x08 \x01(\t\x12\x11\n\twindowEnd\x18\t \x01(\x03\x42=\n\x1c\x63om.mxc.push.common.protobufB\x19PublicSpotKlineV3ApiProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PublicSpotKlineV3Api_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\031PublicSpotKlineV3ApiProtoH\001P\001'
-  _globals['_PUBLICSPOTKLINEV3API']._serialized_start=31
-  _globals['_PUBLICSPOTKLINEV3API']._serialized_end=230
-# @@protoc_insertion_point(module_scope)
-```
-
-## File: src/app/infrastructure/exchange/mexc/generated/PushDataV3ApiWrapper_pb2.py
-```python
-# -*- coding: utf-8 -*-
-# Generated by the protocol buffer compiler.  DO NOT EDIT!
-# NO CHECKED-IN PROTOBUF GENCODE
-# source: PushDataV3ApiWrapper.proto
-# Protobuf Python Version: 6.31.1
-"""Generated protocol buffer code."""
-from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
-from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
-from google.protobuf.internal import builder as _builder
-_runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'PushDataV3ApiWrapper.proto'
-)
-# @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-import PublicDealsV3Api_pb2 as PublicDealsV3Api__pb2
-import PublicIncreaseDepthsV3Api_pb2 as PublicIncreaseDepthsV3Api__pb2
-import PublicLimitDepthsV3Api_pb2 as PublicLimitDepthsV3Api__pb2
-import PrivateOrdersV3Api_pb2 as PrivateOrdersV3Api__pb2
-import PublicBookTickerV3Api_pb2 as PublicBookTickerV3Api__pb2
-import PrivateDealsV3Api_pb2 as PrivateDealsV3Api__pb2
-import PrivateAccountV3Api_pb2 as PrivateAccountV3Api__pb2
-import PublicSpotKlineV3Api_pb2 as PublicSpotKlineV3Api__pb2
-import PublicMiniTickerV3Api_pb2 as PublicMiniTickerV3Api__pb2
-import PublicMiniTickersV3Api_pb2 as PublicMiniTickersV3Api__pb2
-import PublicBookTickerBatchV3Api_pb2 as PublicBookTickerBatchV3Api__pb2
-import PublicIncreaseDepthsBatchV3Api_pb2 as PublicIncreaseDepthsBatchV3Api__pb2
-import PublicAggreDepthsV3Api_pb2 as PublicAggreDepthsV3Api__pb2
-import PublicAggreDealsV3Api_pb2 as PublicAggreDealsV3Api__pb2
-import PublicAggreBookTickerV3Api_pb2 as PublicAggreBookTickerV3Api__pb2
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aPushDataV3ApiWrapper.proto\x1a\x16PublicDealsV3Api.proto\x1a\x1fPublicIncreaseDepthsV3Api.proto\x1a\x1cPublicLimitDepthsV3Api.proto\x1a\x18PrivateOrdersV3Api.proto\x1a\x1bPublicBookTickerV3Api.proto\x1a\x17PrivateDealsV3Api.proto\x1a\x19PrivateAccountV3Api.proto\x1a\x1aPublicSpotKlineV3Api.proto\x1a\x1bPublicMiniTickerV3Api.proto\x1a\x1cPublicMiniTickersV3Api.proto\x1a PublicBookTickerBatchV3Api.proto\x1a$PublicIncreaseDepthsBatchV3Api.proto\x1a\x1cPublicAggreDepthsV3Api.proto\x1a\x1bPublicAggreDealsV3Api.proto\x1a PublicAggreBookTickerV3Api.proto\"\xf0\x07\n\x14PushDataV3ApiWrapper\x12\x0f\n\x07\x63hannel\x18\x01 \x01(\t\x12)\n\x0bpublicDeals\x18\xad\x02 \x01(\x0b\x32\x11.PublicDealsV3ApiH\x00\x12;\n\x14publicIncreaseDepths\x18\xae\x02 \x01(\x0b\x32\x1a.PublicIncreaseDepthsV3ApiH\x00\x12\x35\n\x11publicLimitDepths\x18\xaf\x02 \x01(\x0b\x32\x17.PublicLimitDepthsV3ApiH\x00\x12-\n\rprivateOrders\x18\xb0\x02 \x01(\x0b\x32\x13.PrivateOrdersV3ApiH\x00\x12\x33\n\x10publicBookTicker\x18\xb1\x02 \x01(\x0b\x32\x16.PublicBookTickerV3ApiH\x00\x12+\n\x0cprivateDeals\x18\xb2\x02 \x01(\x0b\x32\x12.PrivateDealsV3ApiH\x00\x12/\n\x0eprivateAccount\x18\xb3\x02 \x01(\x0b\x32\x14.PrivateAccountV3ApiH\x00\x12\x31\n\x0fpublicSpotKline\x18\xb4\x02 \x01(\x0b\x32\x15.PublicSpotKlineV3ApiH\x00\x12\x33\n\x10publicMiniTicker\x18\xb5\x02 \x01(\x0b\x32\x16.PublicMiniTickerV3ApiH\x00\x12\x35\n\x11publicMiniTickers\x18\xb6\x02 \x01(\x0b\x32\x17.PublicMiniTickersV3ApiH\x00\x12=\n\x15publicBookTickerBatch\x18\xb7\x02 \x01(\x0b\x32\x1b.PublicBookTickerBatchV3ApiH\x00\x12\x45\n\x19publicIncreaseDepthsBatch\x18\xb8\x02 \x01(\x0b\x32\x1f.PublicIncreaseDepthsBatchV3ApiH\x00\x12\x35\n\x11publicAggreDepths\x18\xb9\x02 \x01(\x0b\x32\x17.PublicAggreDepthsV3ApiH\x00\x12\x33\n\x10publicAggreDeals\x18\xba\x02 \x01(\x0b\x32\x16.PublicAggreDealsV3ApiH\x00\x12=\n\x15publicAggreBookTicker\x18\xbb\x02 \x01(\x0b\x32\x1b.PublicAggreBookTickerV3ApiH\x00\x12\x13\n\x06symbol\x18\x03 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08symbolId\x18\x04 \x01(\tH\x02\x88\x01\x01\x12\x17\n\ncreateTime\x18\x05 \x01(\x03H\x03\x88\x01\x01\x12\x15\n\x08sendTime\x18\x06 \x01(\x03H\x04\x88\x01\x01\x42\x06\n\x04\x62odyB\t\n\x07_symbolB\x0b\n\t_symbolIdB\r\n\x0b_createTimeB\x0b\n\t_sendTimeB=\n\x1c\x63om.mxc.push.common.protobufB\x19PushDataV3ApiWrapperProtoH\x01P\x01\x62\x06proto3')
-
-_globals = globals()
-_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'PushDataV3ApiWrapper_pb2', _globals)
-if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\034com.mxc.push.common.protobufB\031PushDataV3ApiWrapperProtoH\001P\001'
-  _globals['_PUSHDATAV3APIWRAPPER']._serialized_start=477
-  _globals['_PUSHDATAV3APIWRAPPER']._serialized_end=1485
-# @@protoc_insertion_point(module_scope)
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/proto/__init__.py
@@ -2004,32 +659,6 @@ class MexcWebSocketClient:
 from .mexc_ws_client import MexcWebSocketClient
 
 __all__ = ["MexcWebSocketClient"]
-```
-
-## File: src/app/infrastructure/exchange/mexc/ws/mexc_ws_client.py
-```python
-from typing import AsyncIterator, Optional
-
-
-class MexcWebSocketClient:
-    """
-    Thin wrapper over MEXC V3 WebSocket transport.
-
-    This class is intentionally minimal; transport details (auth, ping/pong,
-    reconnect) can be layered later without leaking into Domain/Application.
-    """
-
-    async def subscribe(
-        self, channel: str, symbol: Optional[str] = None
-    ) -> AsyncIterator[object]:
-        """
-        Yield raw protobuf messages for the given channel.
-
-        Args:
-            channel: MEXC stream channel (e.g., depth, deals, orders).
-            symbol: Optional trading pair symbol when required by the stream.
-        """
-        raise NotImplementedError("WebSocket transport not wired yet.")
 ```
 
 ## File: src/app/infrastructure/external/mexc/__init__.py
@@ -2366,56 +995,126 @@ read_only_memory_patterns: []
 ignored_memory_patterns: []
 ```
 
-## File: src/app/application/market/qrl/get_qrl_depth.py
+## File: main.py
 ```python
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.application.market.use_cases.get_depth import _serialize_depth
-from src.app.domain.value_objects.symbol import Symbol
+"""Entrypoint module for the FastAPI application."""
+
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional in production images
+    def load_dotenv() -> None:  # type: ignore
+        return None
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+
+# Ensure src is on sys.path when running `python main.py` directly (e.g., Cloud Run, local)
+ROOT = Path(__file__).parent
+SRC = ROOT / "src"
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+if SRC.exists() and str(SRC) not in sys.path:
+    sys.path.append(str(SRC))
+
+from src.app.interfaces.http.api import account_routes, market_routes, system_routes, tasks_routes, trading_routes, ws_routes
+from src.app.interfaces.http.api import qrl_routes, trading_api
+from src.app.interfaces.http.pages import dashboard_routes
+from src.app.interfaces.http.dependencies import build_exchange_factory
+
+load_dotenv()
 
 
-class GetQrlDepth:
-    """Fetch QRL/USDT order book snapshot."""
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title="QRL/USDT Trading Bot",
+        version="0.1.0",
+    )
 
-    def __init__(self, exchange_factory: ExchangeServiceFactory, limit: int = 50):
-        self._exchange_factory = exchange_factory
-        self._limit = limit
+    static_dir = Path(__file__).parent / "src" / "app" / "interfaces" / "http" / "pages" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-    async def execute(self) -> dict:
-        async with self._exchange_factory() as exchange:
-            book = await exchange.get_depth(Symbol("QRLUSDT"), limit=self._limit)
-        return _serialize_depth(book)
+    app.include_router(account_routes.router, prefix="/api/account", tags=["account"])
+    app.include_router(market_routes.router, prefix="/api/market", tags=["market"])
+    app.include_router(system_routes.router, prefix="/api/system", tags=["system"])
+    app.include_router(trading_routes.router, prefix="/api/trading", tags=["trading"])
+    app.include_router(qrl_routes.router, prefix="/api/qrl", tags=["qrl"])
+    app.include_router(trading_api.router, tags=["price"])
+    app.include_router(ws_routes.router, prefix="/ws", tags=["ws"])
+    app.include_router(tasks_routes.router, prefix="/tasks", tags=["tasks"])
+    app.include_router(tasks_routes.api_router, prefix="/api/tasks", tags=["tasks"])
+    app.include_router(dashboard_routes.router, tags=["pages"])
+    app.get("/", response_class=dashboard_routes.HTMLResponse)(dashboard_routes.dashboard)
+
+    @app.get("/health", tags=["system"])
+    async def health() -> dict[str, str]:
+        """Health check endpoint used by deployment probes."""
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
+
+
+async def _demo_mexc_usage() -> None:
+    """Demonstrate how to initialize the MexcService and call a simple API."""
+    factory = build_exchange_factory()
+    try:
+        async with factory() as service:
+            server_time = await service.get_server_time()
+            print(f"[demo] MEXC server time: {server_time.value.isoformat()}")
+    except Exception as exc:  # pragma: no cover - demonstration only
+        print(f"[demo] Unable to load MEXC credentials: {exc}")
+
+
+def _should_run_demo() -> bool:
+    """Gate demo execution behind an opt-in flag."""
+    return os.getenv("RUN_MEXC_DEMO", "0") == "1"
+
+
+def _run_server() -> None:
+    """Start the uvicorn server using environment configuration."""
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(app, host=host, port=port, reload=False)
+
+
+if __name__ == "__main__":
+    if _should_run_demo():
+        asyncio.run(_demo_mexc_usage())
+    _run_server()
+
+__all__ = ["app"]
 ```
 
-## File: src/app/application/market/qrl/get_qrl_kline.py
+## File: src/app/application/market/mappers/mexc.py
 ```python
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from datetime import UTC, datetime
+from decimal import Decimal
+
 from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
 
 
-class GetQrlKline:
-    """Fetch QRL/USDT kline data."""
-
-    def __init__(self, exchange_factory: ExchangeServiceFactory, interval: str = "1m", limit: int = 100):
-        self._exchange_factory = exchange_factory
-        self._interval = interval
-        self._limit = limit
-
-    async def execute(self) -> list:
-        async with self._exchange_factory() as exchange:
-            klines = await exchange.get_kline(
-                Symbol("QRLUSDT"), interval=self._interval, limit=self._limit
-            )
-        return [
-            [
-                int(k.timestamp.value.timestamp() * 1000),
-                str(k.open),
-                str(k.high),
-                str(k.low),
-                str(k.close),
-                str(k.volume),
-            ]
-            for k in klines
-        ]
+def map_ws_ticker_event_to_domain(event: dict) -> Ticker:
+    """Map MEXC WS ticker event to Ticker VO."""
+    return Ticker(
+        symbol=Symbol(str(event.get("symbol", "QRLUSDT"))),
+        last_price=Decimal(str(event.get("last", "0"))),
+        bid_price=Decimal(str(event.get("bidPrice", "0"))),
+        ask_price=Decimal(str(event.get("askPrice", "0"))),
+        ts=datetime.fromtimestamp(
+            int(event.get("ts", 0)) / 1000, tz=UTC
+        ),
+    )
 ```
 
 ## File: src/app/application/market/qrl/get_qrl_price.py
@@ -2582,135 +1281,34 @@ class GetMarketTradesUseCase:
             return await exchange.get_market_trades(Symbol("QRLUSDT"), limit=payload.limit)
 ```
 
-## File: src/app/application/market/use_cases/get_stats24h.py
+## File: src/app/application/ports/exchange_gateway.py
 ```python
-"""
-Market use case: 24h stats for QRL/USDT.
-"""
+from collections.abc import AsyncIterator
+from typing import Protocol
 
-from dataclasses import dataclass
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.domain.value_objects.symbol import Symbol
-
-
-@dataclass
-class GetStats24hInput:
-    include_timestamp: bool = True
+from app.domain.events.balance_event import BalanceEvent
+from app.domain.events.market_depth_event import MarketDepthEvent
+from app.domain.events.order_event import OrderEvent
+from app.domain.events.trade_event import TradeEvent
+from app.domain.value_objects.symbol import Symbol
 
 
-class GetStats24hUseCase:
-    """Fetch 24h statistics for the fixed QRL/USDT symbol."""
+class ExchangeGateway(Protocol):
+    """Application port for streaming market/account data."""
 
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
+    async def subscribe_market_depth(
+        self, symbol: Symbol
+    ) -> AsyncIterator[MarketDepthEvent]:
+        ...
 
-    async def execute(self, data: GetStats24hInput | None = None) -> dict:
-        async with self._exchange_factory() as exchange:
-            return await exchange.get_ticker_24h(Symbol("QRLUSDT"))
-```
+    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
+        ...
 
-## File: src/app/application/market/use_cases/get_ticker.py
-```python
-"""
-Market use case: get ticker for QRL/USDT.
-"""
+    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
+        ...
 
-from dataclasses import dataclass
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.domain.value_objects.symbol import Symbol
-
-
-@dataclass
-class GetTickerInput:
-    include_timestamp: bool = True
-
-
-class GetTickerUseCase:
-    """Fetch 24h ticker for the fixed QRL/USDT symbol."""
-
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
-
-    async def execute(self, data: GetTickerInput | None = None) -> dict:
-        async with self._exchange_factory() as exchange:
-            return await exchange.get_ticker_24h(Symbol("QRLUSDT"))
-```
-
-## File: src/app/application/ports/exchange_service.py
-```python
-from dataclasses import dataclass
-from typing import AsyncContextManager, Callable, Protocol
-
-from src.app.domain.entities.account import Account
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.kline import KLine
-from src.app.domain.value_objects.order_book import OrderBook
-from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.price import Price
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.time_in_force import TimeInForce
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass(frozen=True)
-class PlaceOrderRequest:
-    symbol: Symbol
-    side: Side
-    order_type: OrderType
-    quantity: Quantity
-    price: Price | None = None
-    time_in_force: TimeInForce | None = None
-    client_order_id: str | None = None
-
-
-@dataclass(frozen=True)
-class CancelOrderRequest:
-    symbol: Symbol
-    order_id: str | None = None
-    client_order_id: str | None = None
-
-
-@dataclass(frozen=True)
-class GetOrderRequest:
-    symbol: Symbol
-    order_id: str | None = None
-    client_order_id: str | None = None
-
-
-class ExchangeService(Protocol, AsyncContextManager["ExchangeService"]):
-    """Application port exposing required exchange operations."""
-
-    async def get_server_time(self) -> Timestamp: ...
-
-    async def get_account(self) -> Account: ...
-
-    async def place_order(self, request: PlaceOrderRequest) -> Order: ...
-
-    async def cancel_order(self, request: CancelOrderRequest) -> Order: ...
-
-    async def get_order(self, request: GetOrderRequest) -> Order: ...
-
-    async def list_open_orders(self, symbol: Symbol | None = None) -> list[Order]: ...
-
-    async def list_trades(self, symbol: Symbol) -> list[Trade]: ...
-
-    async def get_price(self, symbol: Symbol) -> Price: ...
-
-    async def get_kline(self, symbol: Symbol, interval: str, limit: int = 100) -> list[KLine]: ...
-
-    async def get_depth(self, symbol: Symbol, limit: int = 50) -> OrderBook: ...
-
-    async def get_ticker_24h(self, symbol: Symbol) -> dict: ...
-
-    async def get_market_trades(self, symbol: Symbol, limit: int = 50) -> list[dict]: ...
-
-
-ExchangeServiceFactory = Callable[[], ExchangeService]
+    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
+        ...
 ```
 
 ## File: src/app/application/system/use_cases/get_server_time.py
@@ -2781,51 +1379,59 @@ class TradeDTO:
         return asdict(self)
 ```
 
-## File: src/app/application/trading/qrl/cancel_qrl_order.py
+## File: src/app/application/trading/mappers/mexc.py
 ```python
-from src.app.application.ports.exchange_service import CancelOrderRequest, ExchangeServiceFactory
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.domain.value_objects.trade_id import TradeId
 
 
-class CancelQrlOrder:
-    """Cancel QRL/USDT order."""
-
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
-
-    async def execute(self, *, order_id: str | None = None, client_order_id: str | None = None) -> dict:
-        request = CancelOrderRequest(
-            symbol=Symbol("QRLUSDT"), order_id=order_id, client_order_id=client_order_id
+def map_rest_order_dto_to_domain(dto: dict) -> Order:
+    """Map MEXC REST order DTO (primitives) to Order entity."""
+    return Order(
+        order_id=OrderId(str(dto.get("orderId", ""))),
+        symbol=Symbol(str(dto.get("symbol", "QRLUSDT"))),
+        side=Side(str(dto.get("side", "")).upper()),
+        status=OrderStatus(str(dto.get("status", "")).upper()),
+        price=Decimal(str(dto.get("price", "0"))),
+        quantity=Quantity(Decimal(str(dto.get("origQty", "0")))),
+        created_at=Timestamp(
+            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=UTC)
+        ),
+        updated_at=Timestamp(
+            datetime.fromtimestamp(
+                int(dto.get("updateTime", dto.get("time", 0))) / 1000, tz=UTC
+            )
         )
-        async with self._exchange_factory() as exchange:
-            order = await exchange.cancel_order(request)
-        return {
-            "orderId": order.order_id.value,
-            "symbol": order.symbol.value,
-            "status": order.status.value,
-        }
-```
-
-## File: src/app/application/trading/qrl/get_qrl_order.py
-```python
-from src.app.application.ports.exchange_service import ExchangeServiceFactory, GetOrderRequest
-from src.app.application.trading.use_cases.place_order import _serialize_order
-from src.app.domain.value_objects.symbol import Symbol
+        if dto.get("updateTime")
+        else None,
+    )
 
 
-class GetQrlOrder:
-    """Fetch single QRL/USDT order details."""
-
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
-
-    async def execute(self, *, order_id: str | None = None, client_order_id: str | None = None) -> dict:
-        request = GetOrderRequest(
-            symbol=Symbol("QRLUSDT"), order_id=order_id, client_order_id=client_order_id
-        )
-        async with self._exchange_factory() as exchange:
-            order = await exchange.get_order(request)
-        return _serialize_order(order)
+def map_rest_trade_dto_to_domain(dto: dict) -> Trade:
+    """Map MEXC REST trade DTO to Trade entity."""
+    return Trade(
+        trade_id=TradeId(str(dto.get("id", ""))),
+        order_id=OrderId(str(dto.get("orderId", ""))),
+        symbol=Symbol(str(dto.get("symbol", "QRLUSDT"))),
+        side=Side(str(dto.get("side", "")).upper()),
+        price=Decimal(str(dto.get("price", "0"))),
+        quantity=Decimal(str(dto.get("qty", "0"))),
+        fee=Decimal(str(dto["commission"])) if dto.get("commission") is not None else None,
+        fee_asset=str(dto["commissionAsset"]) if dto.get("commissionAsset") else None,
+        timestamp=Timestamp(
+            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=UTC)
+        ),
+    )
 ```
 
 ## File: src/app/application/trading/qrl/guards/qrl_balance_guard.py
@@ -2890,38 +1496,6 @@ class CancelOrderUseCase:
         async with self._exchange_factory() as exchange:
             order = await exchange.cancel_order(request)
         return _serialize_order(order)
-```
-
-## File: src/app/application/trading/use_cases/get_kline.py
-```python
-from dataclasses import dataclass
-from typing import List
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.domain.value_objects.kline import KLine
-from src.app.domain.value_objects.symbol import Symbol
-
-
-def _serialize_kline(k: KLine) -> dict:
-    return {
-        "open": str(k.open),
-        "high": str(k.high),
-        "low": str(k.low),
-        "close": str(k.close),
-        "volume": str(k.volume),
-        "interval": k.interval,
-        "timestamp": k.timestamp.value.isoformat(),
-    }
-
-
-@dataclass
-class GetKlineUseCase:
-    exchange_factory: ExchangeServiceFactory
-
-    async def execute(self, symbol: str, interval: str, limit: int = 100) -> List[dict]:
-        async with self.exchange_factory() as exchange:
-            klines = await exchange.get_kline(Symbol(symbol), interval=interval, limit=limit)
-        return [_serialize_kline(k) for k in klines]
 ```
 
 ## File: src/app/application/trading/use_cases/get_order.py
@@ -3007,69 +1581,21 @@ class ListOrdersUseCase:
         return [_serialize_order(order) for order in orders]
 ```
 
-## File: src/app/domain/entities/order.py
+## File: src/app/domain/entities/account.py
 ```python
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal
 
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.order_status import OrderStatus
-from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.domain.value_objects.balance import Balance
 from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.domain.value_objects.qrl_price import QrlPrice
 
 
 @dataclass
-class Order:
-    """Order entity limited to QRL/USDT spot."""
+class Account:
+    """Spot account snapshot."""
 
-    order_id: OrderId
-    symbol: Symbol
-    side: Side
-    order_type: OrderType
-    status: OrderStatus
-    price: QrlPrice | None
-    quantity: Quantity
-    created_at: Timestamp
-    time_in_force: TimeInForce | None = None
-    client_order_id: str | None = None
-    executed_quantity: Decimal | None = None
-    cumulative_quote_quantity: Decimal | None = None
-    updated_at: Timestamp | None = None
-```
-
-## File: src/app/domain/entities/trade.py
-```python
-from dataclasses import dataclass
-from decimal import Decimal
-
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.domain.value_objects.trade_id import TradeId
-from src.app.domain.value_objects.qrl_price import QrlPrice
-from src.app.domain.value_objects.quantity import Quantity
-
-
-@dataclass
-class Trade:
-    """Trade fill record."""
-
-    trade_id: TradeId
-    order_id: OrderId
-    symbol: Symbol
-    side: Side
-    price: QrlPrice
-    quantity: Quantity
-    fee: Decimal | None
-    fee_asset: str | None
-    timestamp: Timestamp
+    can_trade: bool
+    update_time: Timestamp
+    balances: list[Balance]
 ```
 
 ## File: src/app/domain/events/__init__.py
@@ -3087,69 +1613,31 @@ __all__ = [
 ]
 ```
 
-## File: src/app/domain/factories/aggregates.py
+## File: src/app/domain/events/market_depth_event.py
 ```python
-from __future__ import annotations
+from dataclasses import dataclass
 
-from datetime import datetime, timezone
-from typing import Iterable
-
-from src.app.domain.aggregates.account_state import AccountState
-from src.app.domain.aggregates.market_snapshot import MarketSnapshot
-from src.app.domain.aggregates.trading_session import TradingSession
-from src.app.domain.entities.account import Account
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.order_book_level import OrderBookLevel
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-from src.app.domain.value_objects.timestamp import Timestamp
+from app.domain.value_objects.price import Price
+from app.domain.value_objects.quantity import Quantity
+from app.domain.value_objects.symbol import Symbol
 
 
-def _ts_now() -> Timestamp:
-    return Timestamp(datetime.now(timezone.utc))
+@dataclass(frozen=True)
+class MarketDepthEvent:
+    """
+    Order book depth snapshot/update at a point in time.
 
+    Notes:
+        - Bids/asks are sorted by price on the exchange side.
+        - Versions allow consumers to detect gaps and request replay.
+    """
 
-def build_account_state(
-    *, symbol: Symbol, account: Account, open_orders: Iterable[Order] = ()
-) -> AccountState:
-    return AccountState(
-        symbol=symbol,
-        account=account,
-        open_orders=list(open_orders),
-        updated_at=_ts_now(),
-    )
-
-
-def build_trading_session(
-    *, symbol: Symbol, orders: Iterable[Order] = (), trades: Iterable[Trade] = ()
-) -> TradingSession:
-    now = _ts_now()
-    return TradingSession(
-        symbol=symbol,
-        open_orders=list(orders),
-        trades=list(trades),
-        started_at=now,
-        last_activity_at=now,
-    )
-
-
-def build_market_snapshot(
-    *,
-    symbol: Symbol,
-    bids: Iterable[OrderBookLevel] = (),
-    asks: Iterable[OrderBookLevel] = (),
-    trades: Iterable[Trade] = (),
-    ticker: Ticker | None = None,
-) -> MarketSnapshot:
-    return MarketSnapshot(
-        symbol=symbol,
-        bids=list(bids),
-        asks=list(asks),
-        trades=list(trades),
-        ticker=ticker,
-        updated_at=_ts_now(),
-    )
+    symbol: Symbol
+    bids: list[tuple[Price, Quantity]]
+    asks: list[tuple[Price, Quantity]]
+    event_type: str | None
+    from_version: str | None
+    to_version: str | None
 ```
 
 ## File: src/app/domain/services/__init__.py
@@ -3221,6 +1709,41 @@ class ValuationService:
         return quantity * unit_price
 ```
 
+## File: src/app/domain/value_objects/__init__.py
+```python
+"""Domain Value Objects for QRL/USDT scope."""
+
+from src.app.domain.value_objects.kline import KLine
+from src.app.domain.value_objects.kline_interval import KlineInterval
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_side import OrderSide
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.sub_account_id import SubAccountId
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.domain.value_objects.trade_id import TradeId
+
+__all__ = [
+    "KLine",
+    "KlineInterval",
+    "OrderId",
+    "OrderSide",
+    "OrderStatus",
+    "Price",
+    "Quantity",
+    "Side",
+    "SubAccountId",
+    "Symbol",
+    "Ticker",
+    "Timestamp",
+    "TradeId",
+]
+```
+
 ## File: src/app/domain/value_objects/balance_comparison_result.py
 ```python
 from dataclasses import dataclass
@@ -3239,6 +1762,55 @@ class BalanceComparisonResult:
     action: str
     preferred_side: Side | None
     reason: str | None = None
+```
+
+## File: src/app/domain/value_objects/client_order_id.py
+```python
+from dataclasses import dataclass
+
+_MAX_CLIENT_ORDER_ID_LENGTH = 32
+
+
+@dataclass(frozen=True)
+class ClientOrderId:
+    """Client-supplied idempotency key for orders."""
+
+    value: str
+
+    def __post_init__(self):
+        if not self.value:
+            raise ValueError("Client order id cannot be empty")
+        if len(self.value) > _MAX_CLIENT_ORDER_ID_LENGTH:
+            raise ValueError("Client order id must be 32 characters or fewer")
+```
+
+## File: src/app/domain/value_objects/kline_interval.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class KlineInterval:
+    """Supported MEXC spot kline intervals for QRL/USDT."""
+
+    value: str
+
+    _allowed: ClassVar[set[str]] = {
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "4h",
+        "1d",
+    }
+
+    def __post_init__(self):
+        if self.value not in self._allowed:
+            raise ValueError(f"KlineInterval must be one of {sorted(self._allowed)}")
 ```
 
 ## File: src/app/domain/value_objects/normalized_balances.py
@@ -3281,6 +1853,208 @@ class OrderCommand:
     time_in_force: TimeInForce
 ```
 
+## File: src/app/domain/value_objects/order_status.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class OrderStatus:
+    """Order status with a minimal allowed set."""
+
+    value: str
+
+    _allowed: ClassVar[set[str]] = {
+        "NEW",
+        "PARTIALLY_FILLED",
+        "FILLED",
+        "CANCELED",
+        "REJECTED",
+    }
+
+    def __post_init__(self):
+        if self.value not in self._allowed:
+            raise ValueError(f"OrderStatus must be one of {sorted(self._allowed)}")
+```
+
+## File: src/app/domain/value_objects/order_type.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class OrderType:
+    """Supported MEXC order types."""
+
+    value: str
+
+    _allowed: ClassVar[set[str]] = {"LIMIT", "MARKET"}
+
+    def __post_init__(self):
+        if self.value not in self._allowed:
+            raise ValueError(f"OrderType must be one of {sorted(self._allowed)}")
+```
+
+## File: src/app/domain/value_objects/price.py
+```python
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+@dataclass(frozen=True)
+class Price:
+    """Quote for a trading pair with bid/ask/last and timestamp."""
+
+    bid: Decimal
+    ask: Decimal
+    last: Decimal
+    timestamp: Timestamp
+
+    def __post_init__(self):
+        if self.bid <= 0 or self.ask <= 0 or self.last <= 0:
+            raise ValueError("Price values must be positive")
+
+    @classmethod
+    def from_single(cls, value: Decimal, ts: datetime | None = None) -> "Price":
+        """Construct a Price when only a single quote is available."""
+        stamp = Timestamp(ts or datetime.now(UTC))
+        return cls(bid=value, ask=value, last=value, timestamp=stamp)
+```
+
+## File: src/app/domain/value_objects/qrl_price.py
+```python
+from __future__ import annotations
+
+from decimal import ROUND_DOWN, Decimal, getcontext
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.app.domain.value_objects.qrl_quantity import QrlQuantity
+
+getcontext().prec = 28
+
+
+class QrlPrice:
+    """
+    QRL/USDT 專用價格 Value Object
+    - 不可變
+    - 強制 tick size
+    """
+
+    TICK_SIZE = Decimal("0.0001")
+    MIN_PRICE = TICK_SIZE
+
+    def __init__(self, value: Decimal | str | float):
+        self._value = self._normalize(Decimal(str(value)))
+
+    @staticmethod
+    def _normalize(value: Decimal) -> Decimal:
+        if value <= 0:
+            raise ValueError("QRL price must be > 0")
+
+        normalized = (value // QrlPrice.TICK_SIZE) * QrlPrice.TICK_SIZE
+
+        if normalized < QrlPrice.MIN_PRICE:
+            raise ValueError("QRL price below minimum tick size")
+
+        return normalized.quantize(QrlPrice.TICK_SIZE, rounding=ROUND_DOWN)
+
+    @property
+    def value(self) -> Decimal:
+        return self._value
+
+    def __str__(self) -> str:
+        return format(self._value, "f")
+
+    def __repr__(self) -> str:
+        return f"QrlPrice({self._value})"
+
+    def multiply(self, quantity: QrlQuantity) -> Decimal:
+        return (self._value * quantity.value).quantize(
+            Decimal("0.00000001"), rounding=ROUND_DOWN
+        )
+```
+
+## File: src/app/domain/value_objects/qrl_quantity.py
+```python
+from __future__ import annotations
+
+from decimal import ROUND_DOWN, Decimal, getcontext
+
+getcontext().prec = 28
+
+
+class QrlQuantity:
+    """
+    QRL 專用數量 Value Object
+    - 不可變
+    - 防 fat finger
+    """
+
+    STEP_SIZE = Decimal("1")
+    MIN_QTY = Decimal("1")
+    MAX_QTY = Decimal("1000000")
+
+    def __init__(self, value: Decimal | str | int | float):
+        self._value = self._normalize(Decimal(str(value)))
+
+    @staticmethod
+    def _normalize(value: Decimal) -> Decimal:
+        if value <= 0:
+            raise ValueError("QRL quantity must be > 0")
+
+        normalized = (value // QrlQuantity.STEP_SIZE) * QrlQuantity.STEP_SIZE
+
+        if normalized < QrlQuantity.MIN_QTY:
+            raise ValueError("QRL quantity below minimum")
+
+        if normalized > QrlQuantity.MAX_QTY:
+            raise ValueError("QRL quantity exceeds safety limit")
+
+        return normalized.quantize(QrlQuantity.STEP_SIZE, rounding=ROUND_DOWN)
+
+    @property
+    def value(self) -> Decimal:
+        return self._value
+
+    def __str__(self) -> str:
+        return format(self._value, "f")
+
+    def __repr__(self) -> str:
+        return f"QrlQuantity({self._value})"
+```
+
+## File: src/app/domain/value_objects/qrl_usdt_pair.py
+```python
+class QrlUsdtPair:
+    """QRL/USDT 專用交易對,不允許動態建構."""
+
+    SYMBOL = "QRLUSDT"
+    BASE = "QRL"
+    QUOTE = "USDT"
+
+    @classmethod
+    def symbol(cls) -> str:
+        return cls.SYMBOL
+
+    @classmethod
+    def base(cls) -> str:
+        return cls.BASE
+
+    @classmethod
+    def quote(cls) -> str:
+        return cls.QUOTE
+```
+
 ## File: src/app/domain/value_objects/slippage.py
 ```python
 from dataclasses import dataclass
@@ -3297,465 +2071,831 @@ class SlippageAssessment:
     reason: str | None = None
 ```
 
-## File: src/app/infrastructure/exchange/mexc/factories.py
+## File: src/app/domain/value_objects/ticker.py
 ```python
-"""
-Factories to translate MEXC REST/WebSocket DTOs into domain aggregates.
-
-These implementations are intentionally lightweight placeholders. They ensure
-that aggregate construction paths are present and wired, while allowing the
-future work to enrich the mapping with full business rules.
-"""
-
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Iterable, Optional
 
-from src.app.domain.aggregates.account_state import AccountState
-from src.app.domain.aggregates.market_snapshot import MarketSnapshot
-from src.app.domain.aggregates.trading_session import TradingSession
-from src.app.domain.factories.aggregates import (
-    build_account_state,
-    build_market_snapshot,
-    build_trading_session,
-)
-from src.app.domain.entities.account import Account
-from src.app.domain.entities.kline import Kline
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.order_book_level import OrderBookLevel
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.balance import Balance
-from src.app.domain.value_objects.kline_interval import KlineInterval
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.order_side import OrderSide
-from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.order_status import OrderStatus
-from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-from src.app.domain.value_objects.timestamp import Timestamp
-from src.app.domain.value_objects.trade_id import TradeId
-from src.app.infrastructure.exchange.mexc.generated import (
+
+
+@dataclass(frozen=True)
+class Ticker:
+    """Minimal ticker snapshot for QRL/USDT."""
+
+    symbol: Symbol
+    last_price: Decimal
+    bid_price: Decimal
+    ask_price: Decimal
+    ts: datetime
+
+    def __post_init__(self):
+        if self.last_price <= 0 or self.bid_price <= 0 or self.ask_price <= 0:
+            raise ValueError("Ticker prices must be positive")
+        if self.bid_price > self.ask_price:
+            raise ValueError("Bid price cannot exceed ask price")
+        if self.ts.tzinfo is None:
+            object.__setattr__(self, "ts", self.ts.replace(tzinfo=UTC))
+```
+
+## File: src/app/domain/value_objects/time_in_force.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class TimeInForce:
+    """Time in force constraints for limit orders."""
+
+    value: str
+
+    _allowed: ClassVar[set[str]] = {"GTC", "IOC", "FOK"}
+
+    def __post_init__(self):
+        if self.value not in self._allowed:
+            raise ValueError(f"TimeInForce must be one of {sorted(self._allowed)}")
+```
+
+## File: src/app/domain/value_objects/timestamp.py
+```python
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+
+@dataclass(frozen=True)
+class Timestamp:
+    """UTC timestamp wrapper."""
+
+    value: datetime
+
+    def __post_init__(self):
+        if self.value.tzinfo is None:
+            object.__setattr__(self, "value", self.value.replace(tzinfo=UTC))
+```
+
+## File: src/app/infrastructure/exchange/mexc/adapters/market_event_adapter.py
+```python
+from collections.abc import AsyncIterator
+
+from app.application.ports.exchange_gateway import ExchangeGateway
+from app.domain.events.balance_event import BalanceEvent
+from app.domain.events.market_depth_event import MarketDepthEvent
+from app.domain.events.order_event import OrderEvent
+from app.domain.events.trade_event import TradeEvent
+from app.domain.value_objects.symbol import Symbol
+from app.infrastructure.exchange.mexc.generated import (
     PrivateAccountV3Api_pb2,
     PrivateOrdersV3Api_pb2,
     PublicAggreDepthsV3Api_pb2,
-    PublicAggreDealsV3Api_pb2,
-    PublicBookTickerV3Api_pb2,
-    PublicSpotKlineV3Api_pb2,
+    PublicDealsV3Api_pb2,
 )
+from app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
+
+from .balance_mapper import balance_proto_to_domain
+from .depth_mapper import depth_proto_to_domain
+from .order_mapper import order_proto_to_domain
+from .trade_mapper import trade_proto_to_domain
 
 
-def _default_timestamp() -> Timestamp:
-    return Timestamp(datetime.now(timezone.utc))
+class MexcExchangeGateway(ExchangeGateway):
+    """Infrastructure adapter that translates MEXC WS protobuf into domain events."""
+
+    def __init__(self, ws_client: MexcWebSocketClient):
+        self._ws = ws_client
+
+    async def subscribe_market_depth(
+        self, symbol: Symbol
+    ) -> AsyncIterator[MarketDepthEvent]:
+        async for proto in self._ws.subscribe("depth", symbol.value):
+            if isinstance(proto, PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api):
+                yield depth_proto_to_domain(symbol, proto)
+
+    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
+        async for proto in self._ws.subscribe("deals", symbol.value):
+            if isinstance(proto, PublicDealsV3Api_pb2.PublicDealsV3Api):
+                for item in proto.deals:
+                    yield trade_proto_to_domain(symbol, item)
+
+    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
+        async for proto in self._ws.subscribe("orders"):
+            if isinstance(proto, PrivateOrdersV3Api_pb2.PrivateOrdersV3Api):
+                yield order_proto_to_domain(proto)
+
+    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
+        async for proto in self._ws.subscribe("balances"):
+            if isinstance(proto, PrivateAccountV3Api_pb2.PrivateAccountV3Api):
+                yield balance_proto_to_domain(proto)
+```
+
+## File: src/app/infrastructure/exchange/mexc/adapters/trade_mapper.py
+```python
+from app.domain.events.trade_event import TradeEvent
+from app.domain.value_objects.price import Price
+from app.domain.value_objects.quantity import Quantity
+from app.domain.value_objects.symbol import Symbol
+from app.domain.value_objects.trade_id import TradeId
+from app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
+
+_MEXC_TRADE_TYPE_SELL = 2
 
 
-def _levels_from_depth(
-    depth: Optional[PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api],
-) -> tuple[list[OrderBookLevel], list[OrderBookLevel]]:
-    if depth is None:
-        return [], []
-
-    bids = [
-        OrderBookLevel(
-            price=Decimal(str(item.price)),
-            quantity=Decimal(str(item.quantity)),
-            side=OrderSide("BUY"),
-        )
-        for item in getattr(depth, "bids", [])  # type: ignore[attr-defined]
-    ]
-    asks = [
-        OrderBookLevel(
-            price=Decimal(str(item.price)),
-            quantity=Decimal(str(item.quantity)),
-            side=OrderSide("SELL"),
-        )
-        for item in getattr(depth, "asks", [])  # type: ignore[attr-defined]
-    ]
-    return bids, asks
-
-
-def market_snapshot_from_sources(
-    symbol: Symbol,
-    depth_proto: Optional[PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api] = None,
-    trades: Optional[Iterable[Trade]] = None,
-    ticker_proto: Optional[PublicBookTickerV3Api_pb2.PublicBookTickerV3Api] = None,
-) -> MarketSnapshot:
-    """
-    Build a MarketSnapshot aggregate from available feed DTOs.
-
-    The function accepts partial data (depth only, depth + trades, etc.) so
-    the callers can incrementally enrich the snapshot.
-    """
-
-    bids, asks = _levels_from_depth(depth_proto)
-    ticker: Ticker | None = None
-    if ticker_proto is not None:
-        bid = Decimal(str(getattr(ticker_proto, "bidPrice", 0)))
-        ask = Decimal(str(getattr(ticker_proto, "askPrice", 0)))
-        last = Decimal(str(getattr(ticker_proto, "lastPrice", 0)))
-        if bid > 0 and ask > 0 and last > 0:
-            ticker = Ticker(
-                symbol=symbol,
-                last_price=last,
-                bid_price=bid,
-                ask_price=ask,
-                ts=_default_timestamp().value,
-            )
-
-    return build_market_snapshot(
+def trade_proto_to_domain(
+    symbol: Symbol, proto: PublicDealsV3Api_pb2.PublicDealsV3ApiItem
+) -> TradeEvent:
+    # tradeType: 1=buy, 2=sell in MEXC WS push; treat 2 as maker sell
+    is_buyer_maker = proto.tradeType == _MEXC_TRADE_TYPE_SELL
+    return TradeEvent(
+        trade_id=TradeId(str(proto.time)),
         symbol=symbol,
-        bids=bids,
-        asks=asks,
-        trades=list(trades or []),
-        ticker=ticker,
+        price=Price(float(proto.price)),
+        quantity=Quantity(float(proto.quantity)),
+        is_buyer_maker=is_buyer_maker,
+        timestamp=proto.time,
     )
-
-
-def account_state_from_proto(
-    symbol: Symbol, account_proto: PrivateAccountV3Api_pb2.PrivateAccountV3Api
-) -> AccountState:
-    """
-    Translate private account snapshot DTO into AccountState aggregate.
-
-    Balance parsing is intentionally minimal; further normalization can be
-    implemented when business rules are ready.
-    """
-
-    balances: list[Balance] = []
-    for item in getattr(account_proto, "balances", []):  # type: ignore[attr-defined]
-        balances.append(
-            Balance(
-                asset=getattr(item, "asset", ""),
-                free=Decimal(str(getattr(item, "free", 0))),
-                locked=Decimal(str(getattr(item, "locked", 0))),
-            )
-        )
-
-    account = Account(
-        can_trade=bool(getattr(account_proto, "canTrade", True)),
-        update_time=_default_timestamp(),
-        balances=balances,
-    )
-    return build_account_state(symbol=symbol, account=account, open_orders=[])
-
-
-def trading_session_from_orders(
-    symbol: Symbol, orders: Optional[Iterable[Order]] = None, trades: Optional[Iterable[Trade]] = None
-) -> TradingSession:
-    """Create a TradingSession aggregate from existing order/trade records."""
-
-    return build_trading_session(symbol=symbol, orders=orders or [], trades=trades or [])
-
-
-def trades_from_public_proto(
-    symbol: Symbol, deals_proto: Optional[PublicAggreDealsV3Api_pb2.PublicAggreDealsV3Api] = None
-) -> list[Trade]:
-    """Convert public trades DTO to domain trades (skeleton mapping)."""
-
-    if deals_proto is None:
-        return []
-
-    trades: list[Trade] = []
-    for item in getattr(deals_proto, "deals", []):  # type: ignore[attr-defined]
-        trade_id_str = str(getattr(item, "tradeId", "0"))
-        order_id_str = str(getattr(item, "orderId", "0"))
-        trades.append(
-            Trade(
-                trade_id=TradeId(trade_id_str),
-                order_id=OrderId(order_id_str),
-                symbol=symbol,
-                side=OrderSide("BUY") if bool(getattr(item, "isBuyerMaker", False)) else OrderSide("SELL"),
-                price=Decimal(str(getattr(item, "price", 0))),
-                quantity=Decimal(str(getattr(item, "quantity", 0))),
-                fee=None,
-                fee_asset=None,
-                timestamp=_default_timestamp(),
-            )
-        )
-    return trades
-
-
-def klines_from_proto(
-    symbol: Symbol, kline_proto: Optional[PublicSpotKlineV3Api_pb2.PublicSpotKlineV3Api] = None
-) -> list[Kline]:
-    """Convert spot kline DTOs to domain klines (skeleton mapping)."""
-
-    if kline_proto is None:
-        return []
-
-    klines: list[Kline] = []
-    interval = KlineInterval(str(getattr(kline_proto, "interval", "1m")))
-    for item in getattr(kline_proto, "klineList", []):  # type: ignore[attr-defined]
-        open_time_ms = int(getattr(item, "openTime", 0))
-        close_time_ms = int(getattr(item, "closeTime", 0))
-        klines.append(
-            Kline(
-                symbol=symbol,
-                interval=interval,
-                open=Decimal(str(getattr(item, "open", 0))),
-                high=Decimal(str(getattr(item, "high", 0))),
-                low=Decimal(str(getattr(item, "low", 0))),
-                close=Decimal(str(getattr(item, "close", 0))),
-                volume=Decimal(str(getattr(item, "volume", 0))),
-                open_time=Timestamp(datetime.fromtimestamp(open_time_ms / 1000, tz=timezone.utc)),
-                close_time=Timestamp(datetime.fromtimestamp(close_time_ms / 1000, tz=timezone.utc)),
-            )
-        )
-    return klines
-
-
-def orders_from_private_proto(
-    symbol: Symbol, orders_proto: Optional[PrivateOrdersV3Api_pb2.PrivateOrdersV3Api] = None
-) -> list[Order]:
-    """Convert private orders DTO to domain orders (skeleton mapping)."""
-
-    if orders_proto is None:
-        return []
-
-    orders: list[Order] = []
-    for item in getattr(orders_proto, "orders", []):  # type: ignore[attr-defined]
-        orders.append(
-            Order(
-                order_id=OrderId(str(getattr(item, "orderId", ""))),
-                symbol=symbol,
-                side=OrderSide(str(getattr(item, "side", "BUY"))),
-                order_type=OrderType(str(getattr(item, "type", "LIMIT"))),
-                status=OrderStatus(str(getattr(item, "status", "NEW"))),
-                price=Decimal(str(getattr(item, "price", 0))),
-                quantity=Quantity(Decimal(str(getattr(item, "origQty", 0)))),
-                created_at=_default_timestamp(),
-                time_in_force=None,
-                client_order_id=str(getattr(item, "clientOrderId", "")) if getattr(item, "clientOrderId", None) else None,
-                executed_quantity=Decimal(str(getattr(item, "executedQty", 0))),
-                cumulative_quote_quantity=Decimal(str(getattr(item, "cummulativeQuoteQty", 0))),
-                updated_at=_default_timestamp(),
-            )
-        )
-    return orders
 ```
 
-## File: src/app/infrastructure/exchange/mexc/qrl/qrl_rest_client.py
+## File: src/app/infrastructure/exchange/mexc/generated/PrivateAccountV3Api_pb2.py
 ```python
-from src.app.domain.value_objects.qrl_usdt_pair import QrlUsdtPair
-from src.app.infrastructure.exchange.mexc.rest_client import MexcRestClient
-from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PrivateAccountV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PrivateAccountV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
 
 
-class QrlRestClient:
-    """Wrapper to freeze symbol to QRL/USDT for all REST calls."""
 
-    def __init__(self, settings: MexcSettings):
-        self._settings = settings
-        self._client = MexcRestClient(settings)
 
-    async def __aenter__(self) -> "QrlRestClient":
-        await self._client.__aenter__()
-        return self
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19PrivateAccountV3Api.proto"\xba\x01\n\x13PrivateAccountV3Api\x12\x11\n\tvcoinName\x18\x01 \x01(\t\x12\x0e\n\x06\x63oinId\x18\x02 \x01(\t\x12\x15\n\rbalanceAmount\x18\x03 \x01(\t\x12\x1b\n\x13\x62\x61lanceAmountChange\x18\x04 \x01(\t\x12\x14\n\x0c\x66rozenAmount\x18\x05 \x01(\t\x12\x1a\n\x12\x66rozenAmountChange\x18\x06 \x01(\t\x12\x0c\n\x04type\x18\x07 \x01(\t\x12\x0c\n\x04time\x18\x08 \x01(\x03\x42<\n\x1c\x63om.mxc.push.common.protobufB\x18PrivateAccountV3ApiProtoH\x01P\x01\x62\x06proto3')
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self._client.__aexit__(exc_type, exc, tb)
-
-    async def ticker_24h(self) -> dict:
-        return await self._client.ticker_24h(symbol=QrlUsdtPair.symbol())
-
-    async def klines(self, *, interval: str, limit: int) -> list:
-        return await self._client.klines(symbol=QrlUsdtPair.symbol(), interval=interval, limit=limit)
-
-    async def depth(self, *, limit: int = 50) -> dict:
-        return await self._client.depth(symbol=QrlUsdtPair.symbol(), limit=limit)
-
-    async def market_trades(self, *, limit: int = 50) -> list:
-        return await self._client.trades(symbol=QrlUsdtPair.symbol(), limit=limit)
-
-    async def create_order(
-        self,
-        *,
-        side: str,
-        order_type: str,
-        quantity: str,
-        price: str | None,
-        time_in_force: str | None,
-        client_order_id: str | None,
-    ) -> dict:
-        return await self._client.create_order(
-            symbol=QrlUsdtPair.symbol(),
-            side=side,
-            order_type=order_type,
-            quantity=quantity,
-            price=price,
-            time_in_force=time_in_force,
-            client_order_id=client_order_id,
-        )
-
-    async def get_order(self, *, order_id: str | None, client_order_id: str | None) -> dict:
-        return await self._client.get_order(
-            symbol=QrlUsdtPair.symbol(), order_id=order_id, client_order_id=client_order_id
-        )
-
-    async def cancel_order(self, *, order_id: str | None, client_order_id: str | None) -> dict:
-        return await self._client.cancel_order(
-            symbol=QrlUsdtPair.symbol(), order_id=order_id, client_order_id=client_order_id
-        )
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PrivateAccountV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\030PrivateAccountV3ApiProtoH\001P\001"
+  _globals["_PRIVATEACCOUNTV3API"]._serialized_start=30
+  _globals["_PRIVATEACCOUNTV3API"]._serialized_end=216
+# @@protoc_insertion_point(module_scope)
 ```
 
-## File: src/app/infrastructure/exchange/mexc/rest_client.py
+## File: src/app/infrastructure/exchange/mexc/generated/PrivateDealsV3Api_pb2.py
 ```python
-import hashlib
-import hmac
-import time
-from typing import Any
-from urllib.parse import urlencode
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PrivateDealsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
 
-import httpx
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PrivateDealsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
 
-from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+_sym_db = _symbol_database.Default()
 
 
-class MexcRestClient:
-    """Async REST client for MEXC spot API v3."""
 
-    def __init__(self, settings: MexcSettings):
-        self._settings = settings
-        self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "MexcRestClient":
-        limits = httpx.Limits(
-            max_connections=self._settings.max_connections,
-            max_keepalive_connections=self._settings.max_keepalive_connections,
-            keepalive_expiry=self._settings.keepalive_expiry,
-        )
-        self._client = httpx.AsyncClient(
-            base_url=self._settings.base_url,
-            timeout=httpx.Timeout(self._settings.timeout),
-            limits=limits,
-        )
-        return self
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17PrivateDealsV3Api.proto"\xec\x01\n\x11PrivateDealsV3Api\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x0e\n\x06\x61mount\x18\x03 \x01(\t\x12\x11\n\ttradeType\x18\x04 \x01(\x05\x12\x0f\n\x07isMaker\x18\x05 \x01(\x08\x12\x13\n\x0bisSelfTrade\x18\x06 \x01(\x08\x12\x0f\n\x07tradeId\x18\x07 \x01(\t\x12\x15\n\rclientOrderId\x18\x08 \x01(\t\x12\x0f\n\x07orderId\x18\t \x01(\t\x12\x11\n\tfeeAmount\x18\n \x01(\t\x12\x13\n\x0b\x66\x65\x65\x43urrency\x18\x0b \x01(\t\x12\x0c\n\x04time\x18\x0c \x01(\x03\x42:\n\x1c\x63om.mxc.push.common.protobufB\x16PrivateDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        if self._client:
-            await self._client.aclose()
-            self._client = None
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PrivateDealsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\026PrivateDealsV3ApiProtoH\001P\001"
+  _globals["_PRIVATEDEALSV3API"]._serialized_start=28
+  _globals["_PRIVATEDEALSV3API"]._serialized_end=264
+# @@protoc_insertion_point(module_scope)
+```
 
-    def _assert_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            raise RuntimeError("MexcRestClient context has not been entered")
-        return self._client
+## File: src/app/infrastructure/exchange/mexc/generated/PrivateOrdersV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PrivateOrdersV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
 
-    def _signed_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        payload = {k: v for k, v in params.items() if v is not None}
-        if self._settings.sub_account_mode == "BROKER":
-            if self._settings.sub_account_name is not None:
-                payload.setdefault("subAccount", self._settings.sub_account_name)
-        elif self._settings.sub_account_id is not None:
-            payload.setdefault("subAccountId", self._settings.sub_account_id)
-        payload.setdefault("timestamp", int(time.time() * 1000))
-        payload.setdefault("recvWindow", self._settings.recv_window)
-        query = urlencode(payload, doseq=True)
-        signature = hmac.new(
-            self._settings.api_secret.encode("utf-8"),
-            query.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        payload["signature"] = signature
-        return payload
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PrivateOrdersV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
 
-    async def _request(
-        self, method: str, path: str, params: dict[str, Any] | None = None, signed: bool = False
-    ) -> dict[str, Any]:
-        client = self._assert_client()
-        request_params = self._signed_params(params or {}) if signed else params or {}
-        headers = {"X-MEXC-APIKEY": self._settings.api_key} if signed else None
-        response = await client.request(method, path, params=request_params, headers=headers)
-        response.raise_for_status()
-        return response.json()
+_sym_db = _symbol_database.Default()
 
-    async def ping(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/ping")
 
-    async def get_server_time(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/time")
 
-    async def get_account(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/account", signed=True)
 
-    async def create_order(
-        self,
-        *,
-        symbol: str,
-        side: str,
-        order_type: str,
-        quantity: str | None = None,
-        price: str | None = None,
-        time_in_force: str | None = None,
-        client_order_id: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "side": side,
-            "type": order_type,
-            "quantity": quantity,
-            "price": price,
-            "timeInForce": time_in_force,
-            "newClientOrderId": client_order_id,
-        }
-        return await self._request("POST", "/api/v3/order", params=params, signed=True)
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18PrivateOrdersV3Api.proto"\xe8\x05\n\x12PrivateOrdersV3Api\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08\x63lientId\x18\x02 \x01(\t\x12\r\n\x05price\x18\x03 \x01(\t\x12\x10\n\x08quantity\x18\x04 \x01(\t\x12\x0e\n\x06\x61mount\x18\x05 \x01(\t\x12\x10\n\x08\x61vgPrice\x18\x06 \x01(\t\x12\x11\n\torderType\x18\x07 \x01(\x05\x12\x11\n\ttradeType\x18\x08 \x01(\x05\x12\x0f\n\x07isMaker\x18\t \x01(\x08\x12\x14\n\x0cremainAmount\x18\n \x01(\t\x12\x16\n\x0eremainQuantity\x18\x0b \x01(\t\x12\x1d\n\x10lastDealQuantity\x18\x0c \x01(\tH\x00\x88\x01\x01\x12\x1a\n\x12\x63umulativeQuantity\x18\r \x01(\t\x12\x18\n\x10\x63umulativeAmount\x18\x0e \x01(\t\x12\x0e\n\x06status\x18\x0f \x01(\x05\x12\x12\n\ncreateTime\x18\x10 \x01(\x03\x12\x13\n\x06market\x18\x11 \x01(\tH\x01\x88\x01\x01\x12\x18\n\x0btriggerType\x18\x12 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0ctriggerPrice\x18\x13 \x01(\tH\x03\x88\x01\x01\x12\x12\n\x05state\x18\x14 \x01(\x05H\x04\x88\x01\x01\x12\x12\n\x05ocoId\x18\x15 \x01(\tH\x05\x88\x01\x01\x12\x18\n\x0brouteFactor\x18\x16 \x01(\tH\x06\x88\x01\x01\x12\x15\n\x08symbolId\x18\x17 \x01(\tH\x07\x88\x01\x01\x12\x15\n\x08marketId\x18\x18 \x01(\tH\x08\x88\x01\x01\x12\x1d\n\x10marketCurrencyId\x18\x19 \x01(\tH\t\x88\x01\x01\x12\x17\n\ncurrencyId\x18\x1a \x01(\tH\n\x88\x01\x01\x42\x13\n\x11_lastDealQuantityB\t\n\x07_marketB\x0e\n\x0c_triggerTypeB\x0f\n\r_triggerPriceB\x08\n\x06_stateB\x08\n\x06_ocoIdB\x0e\n\x0c_routeFactorB\x0b\n\t_symbolIdB\x0b\n\t_marketIdB\x13\n\x11_marketCurrencyIdB\r\n\x0b_currencyIdB;\n\x1c\x63om.mxc.push.common.protobufB\x17PrivateOrdersV3ApiProtoH\x01P\x01\x62\x06proto3')
 
-    async def get_order(
-        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "orderId": order_id,
-            "origClientOrderId": client_order_id,
-        }
-        return await self._request("GET", "/api/v3/order", params=params, signed=True)
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PrivateOrdersV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\027PrivateOrdersV3ApiProtoH\001P\001"
+  _globals["_PRIVATEORDERSV3API"]._serialized_start=29
+  _globals["_PRIVATEORDERSV3API"]._serialized_end=773
+# @@protoc_insertion_point(module_scope)
+```
 
-    async def cancel_order(
-        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "orderId": order_id,
-            "origClientOrderId": client_order_id,
-        }
-        return await self._request("DELETE", "/api/v3/order", params=params, signed=True)
+## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreBookTickerV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicAggreBookTickerV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
 
-    async def list_open_orders(self, *, symbol: str | None = None) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"symbol": symbol} if symbol else {}
-        result = await self._request("GET", "/api/v3/openOrders", params=params, signed=True)
-        if isinstance(result, list):
-            return result
-        return []
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicAggreBookTickerV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
 
-    async def list_trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
-        result = await self._request("GET", "/api/v3/myTrades", params=params, signed=True)
-        if isinstance(result, list):
-            return result
-        return []
+_sym_db = _symbol_database.Default()
 
-    async def ticker_24h(self, *, symbol: str) -> dict[str, Any]:
-        params = {"symbol": symbol}
-        return await self._request("GET", "/api/v3/ticker/24hr", params=params)
 
-    async def klines(self, *, symbol: str, interval: str, limit: int = 100) -> list[list[Any]]:
-        params = {"symbol": symbol, "interval": interval, "limit": limit}
-        result = await self._request("GET", "/api/v3/klines", params=params)
-        if isinstance(result, list):
-            return result
-        return []
 
-    async def trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
-        """Public recent trades."""
-        params = {"symbol": symbol, "limit": limit}
-        result = await self._request("GET", "/api/v3/trades", params=params)
-        if isinstance(result, list):
-            return result
-        return []
 
-    async def depth(self, *, symbol: str, limit: int = 50) -> dict[str, Any]:
-        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
-        return await self._request("GET", "/api/v3/depth", params=params)
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n PublicAggreBookTickerV3Api.proto"j\n\x1aPublicAggreBookTickerV3Api\x12\x10\n\x08\x62idPrice\x18\x01 \x01(\t\x12\x13\n\x0b\x62idQuantity\x18\x02 \x01(\t\x12\x10\n\x08\x61skPrice\x18\x03 \x01(\t\x12\x13\n\x0b\x61skQuantity\x18\x04 \x01(\tBC\n\x1c\x63om.mxc.push.common.protobufB\x1fPublicAggreBookTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicAggreBookTickerV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\037PublicAggreBookTickerV3ApiProtoH\001P\001"
+  _globals["_PUBLICAGGREBOOKTICKERV3API"]._serialized_start=36
+  _globals["_PUBLICAGGREBOOKTICKERV3API"]._serialized_end=142
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreDealsV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicAggreDealsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicAggreDealsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicAggreDealsV3Api.proto"U\n\x15PublicAggreDealsV3Api\x12)\n\x05\x64\x65\x61ls\x18\x01 \x03(\x0b\x32\x1a.PublicAggreDealsV3ApiItem\x12\x11\n\teventType\x18\x02 \x01(\t"]\n\x19PublicAggreDealsV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x11\n\ttradeType\x18\x03 \x01(\x05\x12\x0c\n\x04time\x18\x04 \x01(\x03\x42>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicAggreDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicAggreDealsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\032PublicAggreDealsV3ApiProtoH\001P\001"
+  _globals["_PUBLICAGGREDEALSV3API"]._serialized_start=31
+  _globals["_PUBLICAGGREDEALSV3API"]._serialized_end=116
+  _globals["_PUBLICAGGREDEALSV3APIITEM"]._serialized_start=118
+  _globals["_PUBLICAGGREDEALSV3APIITEM"]._serialized_end=211
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicAggreDepthsV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicAggreDepthsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicAggreDepthsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicAggreDepthsV3Api.proto"\xa7\x01\n\x16PublicAggreDepthsV3Api\x12(\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1a.PublicAggreDepthV3ApiItem\x12(\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1a.PublicAggreDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x13\n\x0b\x66romVersion\x18\x04 \x01(\t\x12\x11\n\ttoVersion\x18\x05 \x01(\t"<\n\x19PublicAggreDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicAggreDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicAggreDepthsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\033PublicAggreDepthsV3ApiProtoH\001P\001"
+  _globals["_PUBLICAGGREDEPTHSV3API"]._serialized_start=33
+  _globals["_PUBLICAGGREDEPTHSV3API"]._serialized_end=200
+  _globals["_PUBLICAGGREDEPTHV3APIITEM"]._serialized_start=202
+  _globals["_PUBLICAGGREDEPTHV3APIITEM"]._serialized_end=262
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicBookTickerBatchV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicBookTickerBatchV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicBookTickerBatchV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+import PublicBookTickerV3Api_pb2 as PublicBookTickerV3Api__pb2
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n PublicBookTickerBatchV3Api.proto\x1a\x1bPublicBookTickerV3Api.proto"C\n\x1aPublicBookTickerBatchV3Api\x12%\n\x05items\x18\x01 \x03(\x0b\x32\x16.PublicBookTickerV3ApiBC\n\x1c\x63om.mxc.push.common.protobufB\x1fPublicBookTickerBatchV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicBookTickerBatchV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\037PublicBookTickerBatchV3ApiProtoH\001P\001"
+  _globals["_PUBLICBOOKTICKERBATCHV3API"]._serialized_start=65
+  _globals["_PUBLICBOOKTICKERBATCHV3API"]._serialized_end=132
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicBookTickerV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicBookTickerV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicBookTickerV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicBookTickerV3Api.proto"e\n\x15PublicBookTickerV3Api\x12\x10\n\x08\x62idPrice\x18\x01 \x01(\t\x12\x13\n\x0b\x62idQuantity\x18\x02 \x01(\t\x12\x10\n\x08\x61skPrice\x18\x03 \x01(\t\x12\x13\n\x0b\x61skQuantity\x18\x04 \x01(\tB>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicBookTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicBookTickerV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\032PublicBookTickerV3ApiProtoH\001P\001"
+  _globals["_PUBLICBOOKTICKERV3API"]._serialized_start=31
+  _globals["_PUBLICBOOKTICKERV3API"]._serialized_end=132
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicDealsV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicDealsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicDealsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16PublicDealsV3Api.proto"K\n\x10PublicDealsV3Api\x12$\n\x05\x64\x65\x61ls\x18\x01 \x03(\x0b\x32\x15.PublicDealsV3ApiItem\x12\x11\n\teventType\x18\x02 \x01(\t"X\n\x14PublicDealsV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\t\x12\x11\n\ttradeType\x18\x03 \x01(\x05\x12\x0c\n\x04time\x18\x04 \x01(\x03\x42\x39\n\x1c\x63om.mxc.push.common.protobufB\x15PublicDealsV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicDealsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\025PublicDealsV3ApiProtoH\001P\001"
+  _globals["_PUBLICDEALSV3API"]._serialized_start=26
+  _globals["_PUBLICDEALSV3API"]._serialized_end=101
+  _globals["_PUBLICDEALSV3APIITEM"]._serialized_start=103
+  _globals["_PUBLICDEALSV3APIITEM"]._serialized_end=191
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicIncreaseDepthsBatchV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicIncreaseDepthsBatchV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicIncreaseDepthsBatchV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+import PublicIncreaseDepthsV3Api_pb2 as PublicIncreaseDepthsV3Api__pb2
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$PublicIncreaseDepthsBatchV3Api.proto\x1a\x1fPublicIncreaseDepthsV3Api.proto"^\n\x1ePublicIncreaseDepthsBatchV3Api\x12)\n\x05items\x18\x01 \x03(\x0b\x32\x1a.PublicIncreaseDepthsV3Api\x12\x11\n\teventType\x18\x02 \x01(\tBG\n\x1c\x63om.mxc.push.common.protobufB#PublicIncreaseDepthsBatchV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicIncreaseDepthsBatchV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB#PublicIncreaseDepthsBatchV3ApiProtoH\001P\001"
+  _globals["_PUBLICINCREASEDEPTHSBATCHV3API"]._serialized_start=73
+  _globals["_PUBLICINCREASEDEPTHSBATCHV3API"]._serialized_end=167
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicIncreaseDepthsV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicIncreaseDepthsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicIncreaseDepthsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1fPublicIncreaseDepthsV3Api.proto"\x99\x01\n\x19PublicIncreaseDepthsV3Api\x12+\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1d.PublicIncreaseDepthV3ApiItem\x12+\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1d.PublicIncreaseDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t"?\n\x1cPublicIncreaseDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tBB\n\x1c\x63om.mxc.push.common.protobufB\x1ePublicIncreaseDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicIncreaseDepthsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\036PublicIncreaseDepthsV3ApiProtoH\001P\001"
+  _globals["_PUBLICINCREASEDEPTHSV3API"]._serialized_start=36
+  _globals["_PUBLICINCREASEDEPTHSV3API"]._serialized_end=189
+  _globals["_PUBLICINCREASEDEPTHV3APIITEM"]._serialized_start=191
+  _globals["_PUBLICINCREASEDEPTHV3APIITEM"]._serialized_end=254
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicLimitDepthsV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicLimitDepthsV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicLimitDepthsV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicLimitDepthsV3Api.proto"\x90\x01\n\x16PublicLimitDepthsV3Api\x12(\n\x04\x61sks\x18\x01 \x03(\x0b\x32\x1a.PublicLimitDepthV3ApiItem\x12(\n\x04\x62ids\x18\x02 \x03(\x0b\x32\x1a.PublicLimitDepthV3ApiItem\x12\x11\n\teventType\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t"<\n\x19PublicLimitDepthV3ApiItem\x12\r\n\x05price\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\tB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicLimitDepthsV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicLimitDepthsV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\033PublicLimitDepthsV3ApiProtoH\001P\001"
+  _globals["_PUBLICLIMITDEPTHSV3API"]._serialized_start=33
+  _globals["_PUBLICLIMITDEPTHSV3API"]._serialized_end=177
+  _globals["_PUBLICLIMITDEPTHV3APIITEM"]._serialized_start=179
+  _globals["_PUBLICLIMITDEPTHV3APIITEM"]._serialized_end=239
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicMiniTickersV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicMiniTickersV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicMiniTickersV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+import PublicMiniTickerV3Api_pb2 as PublicMiniTickerV3Api__pb2
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cPublicMiniTickersV3Api.proto\x1a\x1bPublicMiniTickerV3Api.proto"?\n\x16PublicMiniTickersV3Api\x12%\n\x05items\x18\x01 \x03(\x0b\x32\x16.PublicMiniTickerV3ApiB?\n\x1c\x63om.mxc.push.common.protobufB\x1bPublicMiniTickersV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicMiniTickersV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\033PublicMiniTickersV3ApiProtoH\001P\001"
+  _globals["_PUBLICMINITICKERSV3API"]._serialized_start=61
+  _globals["_PUBLICMINITICKERSV3API"]._serialized_end=124
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicMiniTickerV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicMiniTickerV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicMiniTickerV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1bPublicMiniTickerV3Api.proto"\xf4\x01\n\x15PublicMiniTickerV3Api\x12\x0e\n\x06symbol\x18\x01 \x01(\t\x12\r\n\x05price\x18\x02 \x01(\t\x12\x0c\n\x04rate\x18\x03 \x01(\t\x12\x11\n\tzonedRate\x18\x04 \x01(\t\x12\x0c\n\x04high\x18\x05 \x01(\t\x12\x0b\n\x03low\x18\x06 \x01(\t\x12\x0e\n\x06volume\x18\x07 \x01(\t\x12\x10\n\x08quantity\x18\x08 \x01(\t\x12\x15\n\rlastCloseRate\x18\t \x01(\t\x12\x1a\n\x12lastCloseZonedRate\x18\n \x01(\t\x12\x15\n\rlastCloseHigh\x18\x0b \x01(\t\x12\x14\n\x0clastCloseLow\x18\x0c \x01(\tB>\n\x1c\x63om.mxc.push.common.protobufB\x1aPublicMiniTickerV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicMiniTickerV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\032PublicMiniTickerV3ApiProtoH\001P\001"
+  _globals["_PUBLICMINITICKERV3API"]._serialized_start=32
+  _globals["_PUBLICMINITICKERV3API"]._serialized_end=276
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PublicSpotKlineV3Api_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PublicSpotKlineV3Api.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PublicSpotKlineV3Api.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aPublicSpotKlineV3Api.proto"\xc7\x01\n\x14PublicSpotKlineV3Api\x12\x10\n\x08interval\x18\x01 \x01(\t\x12\x13\n\x0bwindowStart\x18\x02 \x01(\x03\x12\x14\n\x0copeningPrice\x18\x03 \x01(\t\x12\x14\n\x0c\x63losingPrice\x18\x04 \x01(\t\x12\x14\n\x0chighestPrice\x18\x05 \x01(\t\x12\x13\n\x0blowestPrice\x18\x06 \x01(\t\x12\x0e\n\x06volume\x18\x07 \x01(\t\x12\x0e\n\x06\x61mount\x18\x08 \x01(\t\x12\x11\n\twindowEnd\x18\t \x01(\x03\x42=\n\x1c\x63om.mxc.push.common.protobufB\x19PublicSpotKlineV3ApiProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PublicSpotKlineV3Api_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\031PublicSpotKlineV3ApiProtoH\001P\001"
+  _globals["_PUBLICSPOTKLINEV3API"]._serialized_start=31
+  _globals["_PUBLICSPOTKLINEV3API"]._serialized_end=230
+# @@protoc_insertion_point(module_scope)
+```
+
+## File: src/app/infrastructure/exchange/mexc/generated/PushDataV3ApiWrapper_pb2.py
+```python
+# Generated by the protocol buffer compiler.  DO NOT EDIT!
+# NO CHECKED-IN PROTOBUF GENCODE
+# source: PushDataV3ApiWrapper.proto
+# Protobuf Python Version: 6.31.1
+"""Generated protocol buffer code."""
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import runtime_version as _runtime_version
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_runtime_version.ValidateProtobufRuntimeVersion(
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    "",
+    "PushDataV3ApiWrapper.proto"
+)
+# @@protoc_insertion_point(imports)
+
+_sym_db = _symbol_database.Default()
+
+
+import PrivateAccountV3Api_pb2 as PrivateAccountV3Api__pb2
+import PrivateDealsV3Api_pb2 as PrivateDealsV3Api__pb2
+import PrivateOrdersV3Api_pb2 as PrivateOrdersV3Api__pb2
+import PublicAggreBookTickerV3Api_pb2 as PublicAggreBookTickerV3Api__pb2
+import PublicAggreDealsV3Api_pb2 as PublicAggreDealsV3Api__pb2
+import PublicAggreDepthsV3Api_pb2 as PublicAggreDepthsV3Api__pb2
+import PublicBookTickerBatchV3Api_pb2 as PublicBookTickerBatchV3Api__pb2
+import PublicBookTickerV3Api_pb2 as PublicBookTickerV3Api__pb2
+import PublicDealsV3Api_pb2 as PublicDealsV3Api__pb2
+import PublicIncreaseDepthsBatchV3Api_pb2 as PublicIncreaseDepthsBatchV3Api__pb2
+import PublicIncreaseDepthsV3Api_pb2 as PublicIncreaseDepthsV3Api__pb2
+import PublicLimitDepthsV3Api_pb2 as PublicLimitDepthsV3Api__pb2
+import PublicMiniTickersV3Api_pb2 as PublicMiniTickersV3Api__pb2
+import PublicMiniTickerV3Api_pb2 as PublicMiniTickerV3Api__pb2
+import PublicSpotKlineV3Api_pb2 as PublicSpotKlineV3Api__pb2
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aPushDataV3ApiWrapper.proto\x1a\x16PublicDealsV3Api.proto\x1a\x1fPublicIncreaseDepthsV3Api.proto\x1a\x1cPublicLimitDepthsV3Api.proto\x1a\x18PrivateOrdersV3Api.proto\x1a\x1bPublicBookTickerV3Api.proto\x1a\x17PrivateDealsV3Api.proto\x1a\x19PrivateAccountV3Api.proto\x1a\x1aPublicSpotKlineV3Api.proto\x1a\x1bPublicMiniTickerV3Api.proto\x1a\x1cPublicMiniTickersV3Api.proto\x1a PublicBookTickerBatchV3Api.proto\x1a$PublicIncreaseDepthsBatchV3Api.proto\x1a\x1cPublicAggreDepthsV3Api.proto\x1a\x1bPublicAggreDealsV3Api.proto\x1a PublicAggreBookTickerV3Api.proto"\xf0\x07\n\x14PushDataV3ApiWrapper\x12\x0f\n\x07\x63hannel\x18\x01 \x01(\t\x12)\n\x0bpublicDeals\x18\xad\x02 \x01(\x0b\x32\x11.PublicDealsV3ApiH\x00\x12;\n\x14publicIncreaseDepths\x18\xae\x02 \x01(\x0b\x32\x1a.PublicIncreaseDepthsV3ApiH\x00\x12\x35\n\x11publicLimitDepths\x18\xaf\x02 \x01(\x0b\x32\x17.PublicLimitDepthsV3ApiH\x00\x12-\n\rprivateOrders\x18\xb0\x02 \x01(\x0b\x32\x13.PrivateOrdersV3ApiH\x00\x12\x33\n\x10publicBookTicker\x18\xb1\x02 \x01(\x0b\x32\x16.PublicBookTickerV3ApiH\x00\x12+\n\x0cprivateDeals\x18\xb2\x02 \x01(\x0b\x32\x12.PrivateDealsV3ApiH\x00\x12/\n\x0eprivateAccount\x18\xb3\x02 \x01(\x0b\x32\x14.PrivateAccountV3ApiH\x00\x12\x31\n\x0fpublicSpotKline\x18\xb4\x02 \x01(\x0b\x32\x15.PublicSpotKlineV3ApiH\x00\x12\x33\n\x10publicMiniTicker\x18\xb5\x02 \x01(\x0b\x32\x16.PublicMiniTickerV3ApiH\x00\x12\x35\n\x11publicMiniTickers\x18\xb6\x02 \x01(\x0b\x32\x17.PublicMiniTickersV3ApiH\x00\x12=\n\x15publicBookTickerBatch\x18\xb7\x02 \x01(\x0b\x32\x1b.PublicBookTickerBatchV3ApiH\x00\x12\x45\n\x19publicIncreaseDepthsBatch\x18\xb8\x02 \x01(\x0b\x32\x1f.PublicIncreaseDepthsBatchV3ApiH\x00\x12\x35\n\x11publicAggreDepths\x18\xb9\x02 \x01(\x0b\x32\x17.PublicAggreDepthsV3ApiH\x00\x12\x33\n\x10publicAggreDeals\x18\xba\x02 \x01(\x0b\x32\x16.PublicAggreDealsV3ApiH\x00\x12=\n\x15publicAggreBookTicker\x18\xbb\x02 \x01(\x0b\x32\x1b.PublicAggreBookTickerV3ApiH\x00\x12\x13\n\x06symbol\x18\x03 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08symbolId\x18\x04 \x01(\tH\x02\x88\x01\x01\x12\x17\n\ncreateTime\x18\x05 \x01(\x03H\x03\x88\x01\x01\x12\x15\n\x08sendTime\x18\x06 \x01(\x03H\x04\x88\x01\x01\x42\x06\n\x04\x62odyB\t\n\x07_symbolB\x0b\n\t_symbolIdB\r\n\x0b_createTimeB\x0b\n\t_sendTimeB=\n\x1c\x63om.mxc.push.common.protobufB\x19PushDataV3ApiWrapperProtoH\x01P\x01\x62\x06proto3')
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "PushDataV3ApiWrapper_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+  _globals["DESCRIPTOR"]._loaded_options = None
+  _globals["DESCRIPTOR"]._serialized_options = b"\n\034com.mxc.push.common.protobufB\031PushDataV3ApiWrapperProtoH\001P\001"
+  _globals["_PUSHDATAV3APIWRAPPER"]._serialized_start=477
+  _globals["_PUSHDATAV3APIWRAPPER"]._serialized_end=1485
+# @@protoc_insertion_point(module_scope)
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/service.py
@@ -3926,6 +3066,32 @@ class MexcSettings(BaseSettings):
         return cleaned
 ```
 
+## File: src/app/infrastructure/exchange/mexc/ws/mexc_ws_client.py
+```python
+from collections.abc import AsyncIterator
+
+
+class MexcWebSocketClient:
+    """
+    Thin wrapper over MEXC V3 WebSocket transport.
+
+    This class is intentionally minimal; transport details (auth, ping/pong,
+    reconnect) can be layered later without leaking into Domain/Application.
+    """
+
+    async def subscribe(
+        self, channel: str, symbol: str | None = None
+    ) -> AsyncIterator[object]:
+        """
+        Yield raw protobuf messages for the given channel.
+
+        Args:
+            channel: MEXC stream channel (e.g., depth, deals, orders).
+            symbol: Optional trading pair symbol when required by the stream.
+        """
+        raise NotImplementedError("WebSocket transport not wired yet.")
+```
+
 ## File: src/app/interfaces/http/api/account_routes.py
 ```python
 from fastapi import APIRouter, Depends, HTTPException
@@ -3946,66 +3112,6 @@ async def get_balance(exchange_factory: ExchangeServiceFactory = Depends(get_exc
     except Exception as exc:
         # Surface a clear error to the dashboard instead of a generic 500
         raise HTTPException(status_code=502, detail=f"Failed to fetch balance: {exc}") from exc
-```
-
-## File: src/app/interfaces/http/api/market_routes.py
-```python
-from fastapi import APIRouter, Depends, Query
-
-from src.app.application.market.use_cases.get_depth import GetDepthInput, GetDepthUseCase
-from src.app.application.market.use_cases.get_kline import GetKlineInput, GetKlineUseCase
-from src.app.application.market.use_cases.get_market_trades import GetMarketTradesInput, GetMarketTradesUseCase
-from src.app.application.market.use_cases.get_stats24h import GetStats24hUseCase
-from src.app.application.market.use_cases.get_ticker import GetTickerUseCase
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.interfaces.http.dependencies import get_exchange_factory
-
-router = APIRouter()
-
-
-@router.get("/depth")
-async def get_depth(
-    limit: int = Query(default=50, ge=5, le=1000),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Get order book depth for QRL/USDT."""
-    usecase = GetDepthUseCase(exchange_factory)
-    return await usecase.execute(data=GetDepthInput(limit=limit))
-
-
-@router.get("/ticker")
-async def get_ticker(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
-    """Get ticker for QRL/USDT."""
-    usecase = GetTickerUseCase(exchange_factory)
-    return await usecase.execute()
-
-
-@router.get("/kline")
-async def get_kline(
-    interval: str = Query(default="1m"),
-    limit: int = Query(default=50, ge=1, le=500),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Get kline data for QRL/USDT."""
-    usecase = GetKlineUseCase(exchange_factory)
-    return await usecase.execute(data=GetKlineInput(interval=interval, limit=limit))
-
-
-@router.get("/stats24h")
-async def get_stats_24h(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
-    """Get 24h statistics for QRL/USDT."""
-    usecase = GetStats24hUseCase(exchange_factory)
-    return await usecase.execute()
-
-
-@router.get("/trades")
-async def get_market_trades(
-    limit: int = Query(default=50, ge=1, le=500),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Get recent public trades for QRL/USDT."""
-    usecase = GetMarketTradesUseCase(exchange_factory)
-    return await usecase.execute(data=GetMarketTradesInput(limit=limit))
 ```
 
 ## File: src/app/interfaces/http/api/system_routes.py
@@ -4032,118 +3138,6 @@ async def get_server_time(exchange_factory: ExchangeServiceFactory = Depends(get
     """Get server time."""
     usecase = GetServerTimeUseCase(exchange_factory)
     return await usecase.execute()
-```
-
-## File: src/app/interfaces/http/api/trading_api.py
-```python
-from fastapi import APIRouter, Depends, Query
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.application.trading.use_cases.get_kline import GetKlineUseCase
-from src.app.application.trading.use_cases.get_price import GetPriceUseCase
-from src.app.interfaces.http.dependencies import get_exchange_factory
-
-
-router = APIRouter()
-
-
-@router.get("/api/price/{symbol}")
-async def get_price(symbol: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
-    usecase = GetPriceUseCase(exchange_factory)
-    return await usecase.execute(symbol)
-
-
-@router.get("/api/kline/{symbol}/{interval}")
-async def get_kline(
-    symbol: str,
-    interval: str,
-    limit: int = Query(default=60, ge=1, le=500),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    usecase = GetKlineUseCase(exchange_factory)
-    return await usecase.execute(symbol, interval, limit)
-```
-
-## File: src/app/interfaces/http/api/trading_routes.py
-```python
-from decimal import Decimal
-
-from fastapi import APIRouter, Depends, Query
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.application.trading.use_cases.cancel_order import CancelOrderInput, CancelOrderUseCase
-from src.app.application.trading.use_cases.get_order import GetOrderInput, GetOrderUseCase
-from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
-from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
-from src.app.application.trading.use_cases.place_order import PlaceOrderInput, PlaceOrderUseCase
-from src.app.interfaces.http.dependencies import get_exchange_factory
-from src.app.interfaces.http.schemas import (
-    PlaceOrderRequest,
-)
-
-
-router = APIRouter()
-
-
-@router.post("/orders")
-async def place_order(
-    request: PlaceOrderRequest, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
-):
-    """Place spot order for QRL/USDT (subaccount)."""
-    usecase = PlaceOrderUseCase(exchange_factory)
-    data = PlaceOrderInput(
-        symbol=request.symbol,
-        side=request.side,
-        quantity=Decimal(request.quantity),
-        price=Decimal(request.price) if request.price is not None else None,
-        order_type=request.order_type,
-        time_in_force=request.time_in_force if request.time_in_force else "GTC",
-        client_order_id=request.client_order_id,
-    )
-    return await usecase.execute(data)
-
-
-@router.post("/orders/{order_id}/cancel")
-async def cancel_order(
-    order_id: str,
-    symbol: str = Query(default="QRLUSDT"),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Cancel an existing order."""
-    usecase = CancelOrderUseCase(exchange_factory)
-    data = CancelOrderInput(symbol=symbol, order_id=order_id, client_order_id=None)
-    return await usecase.execute(data)
-
-
-@router.get("/orders/{order_id}")
-async def get_order(
-    order_id: str,
-    symbol: str = Query(default="QRLUSDT"),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Get order status."""
-    usecase = GetOrderUseCase(exchange_factory)
-    data = GetOrderInput(symbol=symbol, order_id=order_id, client_order_id=None)
-    return await usecase.execute(data)
-
-
-@router.get("/orders")
-async def list_orders(
-    symbol: str = Query(default="QRLUSDT"),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """List recent orders."""
-    usecase = ListOrdersUseCase(exchange_factory)
-    return await usecase.execute(symbol=symbol)
-
-
-@router.get("/trades")
-async def list_trades(
-    symbol: str = Query(default="QRLUSDT"),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """List recent trades."""
-    usecase = ListTradesUseCase(exchange_factory)
-    return await usecase.execute(symbol)
 ```
 
 ## File: src/app/interfaces/http/api/ws_routes.py
@@ -4220,62 +3214,6 @@ def get_exchange_factory() -> ExchangeServiceFactory:
 })();
 ```
 
-## File: src/app/interfaces/http/schemas.py
-```python
-"""Pydantic schemas for interface layer requests/responses."""
-
-from datetime import datetime
-from decimal import Decimal
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class PlaceOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    side: Literal["BUY", "SELL"]
-    order_type: Literal["LIMIT", "MARKET"] = Field(default="LIMIT", alias="type")
-    quantity: Decimal
-    price: Decimal | None = None
-    time_in_force: Literal["GTC", "IOC", "FOK"] | None = Field(default="GTC", alias="timeInForce")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class CancelOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    order_id: str | None = Field(default=None, alias="orderId")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class GetOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    order_id: str | None = Field(default=None, alias="orderId")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class ListTradesRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-
-
-class AllocationResponse(BaseModel):
-    """Response returned when the allocation task is triggered."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    request_id: str = Field(description="Identifier for the allocation trigger")
-    status: str = Field(description="Execution status for the allocation task")
-    executed_at: datetime = Field(description="UTC timestamp when the task executed")
-    action: str = Field(description="Trade action executed (BUY, SELL, SKIP, REJECTED)")
-    order_id: str | None = Field(default=None, description="Order identifier returned by the exchange")
-    reason: str | None = Field(default=None, description="Reason when action is skipped or rejected")
-    slippage_pct: Decimal | None = Field(
-        default=None, description="Calculated slippage percentage for the planned order"
-    )
-    expected_fill: Decimal | None = Field(
-        default=None, description="Expected fill quantity based on current depth"
-    )
-```
-
 ## File: src/app/interfaces/tasks/entrypoints.py
 ```python
 """HTTP/Scheduler entrypoints for background tasks."""
@@ -4304,104 +3242,46 @@ async def run_allocation(timeout_seconds: float | None = None) -> AllocationResu
     return await asyncio.wait_for(usecase.execute(), timeout=timeout)
 ```
 
-## File: main.py
-```python
-"""Entrypoint module for the FastAPI application."""
+## File: pyproject.toml
+```toml
+[tool.ruff]
+line-length = 100
+target-version = "py311"
 
-import asyncio
-import os
-import sys
-from pathlib import Path
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "N", "W", "UP", "B", "A", "C4", "DTZ",
+    "T10", "ISC", "ICN", "PIE", "PT", "Q", "SIM", "ARG",
+    "ERA", "PD", "PL", "NPY", "RUF",
+]
+# B008: FastAPI's Depends() in default arguments is the canonical DI pattern.
+# Suppressing globally because it applies to every route handler in this project.
+ignore = ["B008"]
 
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:  # pragma: no cover - optional in production images
-    def load_dotenv() -> None:  # type: ignore
-        return None
+[tool.ruff.lint.per-file-ignores]
+# Protobuf generated files must never be manually edited.
+# All lint categories that protoc output naturally violates are suppressed here.
+"src/app/infrastructure/exchange/mexc/generated/**" = [
+    "E402",   # imports not at top — protobuf conditional setup precedes imports
+    "E501",   # binary descriptor strings exceed line length
+    "ERA001", # protobuf comment headers look like commented-out code
+    "F401",   # cross-module imports are used at runtime via protobuf reflection
+    "N999",   # PascalCase_pb2 filenames are protoc convention
+]
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-import uvicorn
+[tool.black]
+line-length = 100
+target-version = ["py311"]
 
-# Ensure src is on sys.path when running `python main.py` directly (e.g., Cloud Run, local)
-ROOT = Path(__file__).parent
-SRC = ROOT / "src"
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-if SRC.exists() and str(SRC) not in sys.path:
-    sys.path.append(str(SRC))
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = [".", "src"]
 
-from src.app.interfaces.http.api import account_routes, market_routes, system_routes, tasks_routes, trading_routes, ws_routes
-from src.app.interfaces.http.api import qrl_routes, trading_api
-from src.app.interfaces.http.pages import dashboard_routes
-from src.app.interfaces.http.dependencies import build_exchange_factory
-
-load_dotenv()
-
-
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
-    app = FastAPI(
-        title="QRL/USDT Trading Bot",
-        version="0.1.0",
-    )
-
-    static_dir = Path(__file__).parent / "src" / "app" / "interfaces" / "http" / "pages" / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-    app.include_router(account_routes.router, prefix="/api/account", tags=["account"])
-    app.include_router(market_routes.router, prefix="/api/market", tags=["market"])
-    app.include_router(system_routes.router, prefix="/api/system", tags=["system"])
-    app.include_router(trading_routes.router, prefix="/api/trading", tags=["trading"])
-    app.include_router(qrl_routes.router, prefix="/api/qrl", tags=["qrl"])
-    app.include_router(trading_api.router, tags=["price"])
-    app.include_router(ws_routes.router, prefix="/ws", tags=["ws"])
-    app.include_router(tasks_routes.router, prefix="/tasks", tags=["tasks"])
-    app.include_router(tasks_routes.api_router, prefix="/api/tasks", tags=["tasks"])
-    app.include_router(dashboard_routes.router, tags=["pages"])
-    app.get("/", response_class=dashboard_routes.HTMLResponse)(dashboard_routes.dashboard)
-
-    @app.get("/health", tags=["system"])
-    async def health() -> dict[str, str]:
-        """Health check endpoint used by deployment probes."""
-        return {"status": "ok"}
-
-    return app
-
-
-app = create_app()
-
-
-async def _demo_mexc_usage() -> None:
-    """Demonstrate how to initialize the MexcService and call a simple API."""
-    factory = build_exchange_factory()
-    try:
-        async with factory() as service:
-            server_time = await service.get_server_time()
-            print(f"[demo] MEXC server time: {server_time.value.isoformat()}")
-    except Exception as exc:  # pragma: no cover - demonstration only
-        print(f"[demo] Unable to load MEXC credentials: {exc}")
-
-
-def _should_run_demo() -> bool:
-    """Gate demo execution behind an opt-in flag."""
-    return os.getenv("RUN_MEXC_DEMO", "0") == "1"
-
-
-def _run_server() -> None:
-    """Start the uvicorn server using environment configuration."""
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(app, host=host, port=port, reload=False)
-
-
-if __name__ == "__main__":
-    if _should_run_demo():
-        asyncio.run(_demo_mexc_usage())
-    _run_server()
-
-__all__ = ["app"]
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
 ```
 
 ## File: src/app/application/account/use_cases/get_balance.py
@@ -4520,57 +3400,402 @@ class GetBalanceUseCase:
         return _serialize_account(account, valuation)
 ```
 
-## File: src/app/application/trading/qrl/place_qrl_order.py
+## File: src/app/application/market/qrl/get_qrl_depth.py
 ```python
-from decimal import Decimal
+from src.app.application.market.use_cases.get_depth import _serialize_depth
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.domain.value_objects.symbol import Symbol
 
-from src.app.application.ports.exchange_service import ExchangeServiceFactory, PlaceOrderRequest
-from src.app.application.trading.use_cases.place_order import _serialize_order
+
+class GetQrlDepth:
+    """Fetch QRL/USDT order book snapshot."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory, limit: int = 50):
+        self._exchange_factory = exchange_factory
+        self._limit = limit
+
+    async def execute(self) -> dict:
+        async with self._exchange_factory() as exchange:
+            book = await exchange.get_depth(Symbol("QRLUSDT"), limit=self._limit)
+        return _serialize_depth(book)
+```
+
+## File: src/app/application/market/qrl/get_qrl_kline.py
+```python
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.domain.value_objects.symbol import Symbol
+
+
+class GetQrlKline:
+    """Fetch QRL/USDT kline data."""
+
+    def __init__(
+        self, exchange_factory: ExchangeServiceFactory, interval: str = "1m", limit: int = 100
+    ):
+        self._exchange_factory = exchange_factory
+        self._interval = interval
+        self._limit = limit
+
+    async def execute(self) -> list:
+        async with self._exchange_factory() as exchange:
+            klines = await exchange.get_kline(
+                Symbol("QRLUSDT"), interval=self._interval, limit=self._limit
+            )
+        return [
+            [
+                int(k.timestamp.value.timestamp() * 1000),
+                str(k.open),
+                str(k.high),
+                str(k.low),
+                str(k.close),
+                str(k.volume),
+            ]
+            for k in klines
+        ]
+```
+
+## File: src/app/application/market/use_cases/get_stats24h.py
+```python
+"""
+Market use case: 24h stats for QRL/USDT.
+"""
+
+from dataclasses import dataclass
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.domain.value_objects.symbol import Symbol
+
+
+@dataclass
+class GetStats24hInput:
+    include_timestamp: bool = True
+
+
+class GetStats24hUseCase:
+    """Fetch 24h statistics for the fixed QRL/USDT symbol."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(self, data: GetStats24hInput | None = None) -> dict:  # noqa: ARG002
+        async with self._exchange_factory() as exchange:
+            return await exchange.get_ticker_24h(Symbol("QRLUSDT"))
+```
+
+## File: src/app/application/market/use_cases/get_ticker.py
+```python
+"""
+Market use case: get ticker for QRL/USDT.
+"""
+
+from dataclasses import dataclass
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.domain.value_objects.symbol import Symbol
+
+
+@dataclass
+class GetTickerInput:
+    include_timestamp: bool = True
+
+
+class GetTickerUseCase:
+    """Fetch 24h ticker for the fixed QRL/USDT symbol."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(self, data: GetTickerInput | None = None) -> dict:  # noqa: ARG002
+        async with self._exchange_factory() as exchange:
+            return await exchange.get_ticker_24h(Symbol("QRLUSDT"))
+```
+
+## File: src/app/application/ports/exchange_service.py
+```python
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
+from typing import Protocol
+
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.kline import KLine
+from src.app.domain.value_objects.order_book import OrderBook
 from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.price import Price
-from src.app.domain.value_objects.qrl_price import QrlPrice
-from src.app.domain.value_objects.qrl_quantity import QrlQuantity
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.domain.value_objects.timestamp import Timestamp
 
 
-class PlaceQrlOrder:
-    """Place QRL/USDT order with fixed symbol and validated VOs."""
+@dataclass(frozen=True)
+class PlaceOrderRequest:
+    symbol: Symbol
+    side: Side
+    order_type: OrderType
+    quantity: Quantity
+    price: Price | None = None
+    time_in_force: TimeInForce | None = None
+    client_order_id: str | None = None
+
+
+@dataclass(frozen=True)
+class CancelOrderRequest:
+    symbol: Symbol
+    order_id: str | None = None
+    client_order_id: str | None = None
+
+
+@dataclass(frozen=True)
+class GetOrderRequest:
+    symbol: Symbol
+    order_id: str | None = None
+    client_order_id: str | None = None
+
+
+class ExchangeService(Protocol, AbstractAsyncContextManager["ExchangeService"]):
+    """Application port exposing required exchange operations."""
+
+    async def get_server_time(self) -> Timestamp: ...
+
+    async def get_account(self) -> Account: ...
+
+    async def place_order(self, request: PlaceOrderRequest) -> Order: ...
+
+    async def cancel_order(self, request: CancelOrderRequest) -> Order: ...
+
+    async def get_order(self, request: GetOrderRequest) -> Order: ...
+
+    async def list_open_orders(self, symbol: Symbol | None = None) -> list[Order]: ...
+
+    async def list_trades(self, symbol: Symbol) -> list[Trade]: ...
+
+    async def get_price(self, symbol: Symbol) -> Price: ...
+
+    async def get_kline(self, symbol: Symbol, interval: str, limit: int = 100) -> list[KLine]: ...
+
+    async def get_depth(self, symbol: Symbol, limit: int = 50) -> OrderBook: ...
+
+    async def get_ticker_24h(self, symbol: Symbol) -> dict: ...
+
+    async def get_market_trades(self, symbol: Symbol, limit: int = 50) -> list[dict]: ...
+
+
+ExchangeServiceFactory = Callable[[], ExchangeService]
+```
+
+## File: src/app/application/trading/qrl/cancel_qrl_order.py
+```python
+from src.app.application.ports.exchange_service import CancelOrderRequest, ExchangeServiceFactory
+from src.app.domain.value_objects.symbol import Symbol
+
+
+class CancelQrlOrder:
+    """Cancel QRL/USDT order."""
 
     def __init__(self, exchange_factory: ExchangeServiceFactory):
         self._exchange_factory = exchange_factory
 
     async def execute(
-        self,
-        *,
-        side: str,
-        order_type: str,
-        price: Decimal | str | float | QrlPrice | None,
-        quantity: Decimal | str | int | float | QrlQuantity,
-        time_in_force: str | None = "GTC",
-        client_order_id: str | None = None,
+        self, *, order_id: str | None = None, client_order_id: str | None = None
     ) -> dict:
-        price_vo = None
-        if price is not None:
-            normalized_price = price if isinstance(price, QrlPrice) else QrlPrice(price)
-            price_vo = Price.from_single(normalized_price.value)
-
-        normalized_qty = quantity if isinstance(quantity, QrlQuantity) else QrlQuantity(quantity)
-        quantity_vo = Quantity(normalized_qty.value)
-        request = PlaceOrderRequest(
-            symbol=Symbol("QRLUSDT"),
-            side=Side(side),
-            order_type=OrderType(order_type),
-            price=price_vo,
-            quantity=quantity_vo,
-            time_in_force=TimeInForce(time_in_force) if time_in_force else None,
-            client_order_id=client_order_id,
+        request = CancelOrderRequest(
+            symbol=Symbol("QRLUSDT"), order_id=order_id, client_order_id=client_order_id
         )
         async with self._exchange_factory() as exchange:
-            order = await exchange.place_order(request)
+            order = await exchange.cancel_order(request)
+        return {
+            "orderId": order.order_id.value,
+            "symbol": order.symbol.value,
+            "status": order.status.value,
+        }
+```
+
+## File: src/app/application/trading/qrl/get_qrl_order.py
+```python
+from src.app.application.ports.exchange_service import ExchangeServiceFactory, GetOrderRequest
+from src.app.application.trading.use_cases.place_order import _serialize_order
+from src.app.domain.value_objects.symbol import Symbol
+
+
+class GetQrlOrder:
+    """Fetch single QRL/USDT order details."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(
+        self, *, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict:
+        request = GetOrderRequest(
+            symbol=Symbol("QRLUSDT"), order_id=order_id, client_order_id=client_order_id
+        )
+        async with self._exchange_factory() as exchange:
+            order = await exchange.get_order(request)
         return _serialize_order(order)
+```
+
+## File: src/app/application/trading/use_cases/get_kline.py
+```python
+from dataclasses import dataclass
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.domain.value_objects.kline import KLine
+from src.app.domain.value_objects.symbol import Symbol
+
+
+def _serialize_kline(k: KLine) -> dict:
+    return {
+        "open": str(k.open),
+        "high": str(k.high),
+        "low": str(k.low),
+        "close": str(k.close),
+        "volume": str(k.volume),
+        "interval": k.interval,
+        "timestamp": k.timestamp.value.isoformat(),
+    }
+
+
+@dataclass
+class GetKlineUseCase:
+    exchange_factory: ExchangeServiceFactory
+
+    async def execute(self, symbol: str, interval: str, limit: int = 100) -> list[dict]:
+        async with self.exchange_factory() as exchange:
+            klines = await exchange.get_kline(Symbol(symbol), interval=interval, limit=limit)
+        return [_serialize_kline(k) for k in klines]
+```
+
+## File: src/app/domain/entities/order.py
+```python
+from dataclasses import dataclass
+from decimal import Decimal
+
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+@dataclass
+class Order:
+    """Order entity limited to QRL/USDT spot."""
+
+    order_id: OrderId
+    symbol: Symbol
+    side: Side
+    order_type: OrderType
+    status: OrderStatus
+    price: QrlPrice | None
+    quantity: Quantity
+    created_at: Timestamp
+    time_in_force: TimeInForce | None = None
+    client_order_id: str | None = None
+    executed_quantity: Decimal | None = None
+    cumulative_quote_quantity: Decimal | None = None
+    updated_at: Timestamp | None = None
+```
+
+## File: src/app/domain/entities/trade.py
+```python
+from dataclasses import dataclass
+from decimal import Decimal
+
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.domain.value_objects.trade_id import TradeId
+
+
+@dataclass
+class Trade:
+    """Trade fill record."""
+
+    trade_id: TradeId
+    order_id: OrderId
+    symbol: Symbol
+    side: Side
+    price: QrlPrice
+    quantity: Quantity
+    fee: Decimal | None
+    fee_asset: str | None
+    timestamp: Timestamp
+```
+
+## File: src/app/domain/factories/aggregates.py
+```python
+from __future__ import annotations
+
+from collections.abc import Iterable
+from datetime import UTC, datetime
+
+from src.app.domain.aggregates.account_state import AccountState
+from src.app.domain.aggregates.market_snapshot import MarketSnapshot
+from src.app.domain.aggregates.trading_session import TradingSession
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.order_book_level import OrderBookLevel
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+def _ts_now() -> Timestamp:
+    return Timestamp(datetime.now(UTC))
+
+
+def build_account_state(
+    *, symbol: Symbol, account: Account, open_orders: Iterable[Order] = ()
+) -> AccountState:
+    return AccountState(
+        symbol=symbol,
+        account=account,
+        open_orders=list(open_orders),
+        updated_at=_ts_now(),
+    )
+
+
+def build_trading_session(
+    *, symbol: Symbol, orders: Iterable[Order] = (), trades: Iterable[Trade] = ()
+) -> TradingSession:
+    now = _ts_now()
+    return TradingSession(
+        symbol=symbol,
+        open_orders=list(orders),
+        trades=list(trades),
+        started_at=now,
+        last_activity_at=now,
+    )
+
+
+def build_market_snapshot(
+    *,
+    symbol: Symbol,
+    bids: Iterable[OrderBookLevel] = (),
+    asks: Iterable[OrderBookLevel] = (),
+    trades: Iterable[Trade] = (),
+    ticker: Ticker | None = None,
+) -> MarketSnapshot:
+    return MarketSnapshot(
+        symbol=symbol,
+        bids=list(bids),
+        asks=list(asks),
+        trades=list(trades),
+        ticker=ticker,
+        updated_at=_ts_now(),
+    )
 ```
 
 ## File: src/app/domain/services/balance_comparison_rule.py
@@ -4714,6 +3939,53 @@ class SlippageAnalyzer:
         )
 ```
 
+## File: src/app/domain/value_objects/kline.py
+```python
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+@dataclass(frozen=True)
+class KLine:
+    """Single candlestick for a trading pair."""
+
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    interval: str
+    timestamp: Timestamp
+
+    def __post_init__(self):
+        if min(self.open, self.high, self.low, self.close) < 0:
+            raise ValueError("KLine prices cannot be negative")
+        if self.volume < 0:
+            raise ValueError("KLine volume cannot be negative")
+        if not self.interval:
+            raise ValueError("KLine interval is required")
+
+    @classmethod
+    def from_raw(  # noqa: PLR0913
+        cls,
+        open_price: Decimal,
+        high: Decimal,
+        low: Decimal,
+        close: Decimal,
+        volume: Decimal,
+        interval: str,
+        timestamp_ms: int,
+    ) -> "KLine":
+        ts = Timestamp(datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC))
+        return cls(
+            open=open_price, high=high, low=low, close=close,
+            volume=volume, interval=interval, timestamp=ts,
+        )
+```
+
 ## File: src/app/domain/value_objects/order_book.py
 ```python
 from dataclasses import dataclass, field
@@ -4751,147 +4023,292 @@ class OrderBook:
     asks: list[DepthLevel] = field(default_factory=list)
 ```
 
-## File: src/app/interfaces/http/api/qrl_routes.py
+## File: src/app/infrastructure/exchange/mexc_api_client.py
 ```python
-import asyncio
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from src.app.domain.entities.trading_pair import TradingPair
+from src.app.domain.value_objects.kline import KLine
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.infrastructure.exchange.mexc.rest_client import MexcRestClient
 
-from src.app.application.market.qrl.get_qrl_depth import GetQrlDepth
-from src.app.application.market.qrl.get_qrl_kline import GetQrlKline
-from src.app.application.market.qrl.get_qrl_price import GetQrlPrice
-from src.app.application.market.use_cases.get_market_trades import GetMarketTradesUseCase
+
+class MexcApiClient:
+    """High-level client that maps REST responses to domain value objects."""
+
+    def __init__(self, rest_client: MexcRestClient):
+        self._rest_client = rest_client
+
+    async def __aenter__(self) -> "MexcApiClient":
+        await self._rest_client.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self._rest_client.__aexit__(exc_type, exc, tb)
+
+    async def get_price(self, pair: TradingPair) -> Price:
+        payload = await self._rest_client.ticker_24h(symbol=pair.symbol)
+        bid = Decimal(payload.get("bidPrice", "0"))
+        ask = Decimal(payload.get("askPrice", "0"))
+        last = Decimal(payload.get("lastPrice", payload.get("last", "0")))
+        ts_value = (
+            payload.get("closeTime")
+            or payload.get("close_time")
+            or int(datetime.now(tz=UTC).timestamp() * 1000)
+        )
+        timestamp = Timestamp(datetime.fromtimestamp(int(ts_value) / 1000, tz=UTC))
+        return Price(bid=bid, ask=ask, last=last, timestamp=timestamp)
+
+    async def get_klines(self, pair: TradingPair, interval: str, limit: int = 100) -> list[KLine]:
+        raw_list = await self._rest_client.klines(
+            symbol=pair.symbol, interval=interval, limit=limit
+        )
+        klines: list[KLine] = []
+        for item in raw_list:
+            if not isinstance(item, Iterable):
+                continue
+            open_time = int(item[0])
+            open_price = Decimal(item[1])
+            high = Decimal(item[2])
+            low = Decimal(item[3])
+            close = Decimal(item[4])
+            volume = Decimal(item[5])
+            klines.append(KLine.from_raw(open_price, high, low, close, volume, interval, open_time))
+        return klines
+```
+
+## File: src/app/infrastructure/exchange/mexc/rest_client.py
+```python
+import hashlib
+import hmac
+import time
+from typing import Any
+from urllib.parse import urlencode
+
+import httpx
+
+from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+
+
+class MexcRestClient:
+    """Async REST client for MEXC spot API v3."""
+
+    def __init__(self, settings: MexcSettings):
+        self._settings = settings
+        self._client: httpx.AsyncClient | None = None
+
+    async def __aenter__(self) -> "MexcRestClient":
+        limits = httpx.Limits(
+            max_connections=self._settings.max_connections,
+            max_keepalive_connections=self._settings.max_keepalive_connections,
+            keepalive_expiry=self._settings.keepalive_expiry,
+        )
+        self._client = httpx.AsyncClient(
+            base_url=self._settings.base_url,
+            timeout=httpx.Timeout(self._settings.timeout),
+            limits=limits,
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+
+    def _assert_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            raise RuntimeError("MexcRestClient context has not been entered")
+        return self._client
+
+    def _signed_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        payload = {k: v for k, v in params.items() if v is not None}
+        if self._settings.sub_account_mode == "BROKER":
+            if self._settings.sub_account_name is not None:
+                payload.setdefault("subAccount", self._settings.sub_account_name)
+        elif self._settings.sub_account_id is not None:
+            payload.setdefault("subAccountId", self._settings.sub_account_id)
+        payload.setdefault("timestamp", int(time.time() * 1000))
+        payload.setdefault("recvWindow", self._settings.recv_window)
+        query = urlencode(payload, doseq=True)
+        signature = hmac.new(
+            self._settings.api_secret.encode("utf-8"),
+            query.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        payload["signature"] = signature
+        return payload
+
+    async def _request(
+        self, method: str, path: str, params: dict[str, Any] | None = None, signed: bool = False
+    ) -> dict[str, Any]:
+        client = self._assert_client()
+        request_params = self._signed_params(params or {}) if signed else params or {}
+        headers = {"X-MEXC-APIKEY": self._settings.api_key} if signed else None
+        response = await client.request(method, path, params=request_params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def ping(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/ping")
+
+    async def get_server_time(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/time")
+
+    async def get_account(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/account", signed=True)
+
+    async def create_order(  # noqa: PLR0913
+        self,
+        *,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: str | None = None,
+        price: str | None = None,
+        time_in_force: str | None = None,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "side": side,
+            "type": order_type,
+            "quantity": quantity,
+            "price": price,
+            "timeInForce": time_in_force,
+            "newClientOrderId": client_order_id,
+        }
+        return await self._request("POST", "/api/v3/order", params=params, signed=True)
+
+    async def get_order(
+        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "orderId": order_id,
+            "origClientOrderId": client_order_id,
+        }
+        return await self._request("GET", "/api/v3/order", params=params, signed=True)
+
+    async def cancel_order(
+        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "orderId": order_id,
+            "origClientOrderId": client_order_id,
+        }
+        return await self._request("DELETE", "/api/v3/order", params=params, signed=True)
+
+    async def list_open_orders(self, *, symbol: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"symbol": symbol} if symbol else {}
+        result = await self._request("GET", "/api/v3/openOrders", params=params, signed=True)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def list_trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
+        result = await self._request("GET", "/api/v3/myTrades", params=params, signed=True)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def ticker_24h(self, *, symbol: str) -> dict[str, Any]:
+        params = {"symbol": symbol}
+        return await self._request("GET", "/api/v3/ticker/24hr", params=params)
+
+    async def klines(self, *, symbol: str, interval: str, limit: int = 100) -> list[list[Any]]:
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        result = await self._request("GET", "/api/v3/klines", params=params)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Public recent trades."""
+        params = {"symbol": symbol, "limit": limit}
+        result = await self._request("GET", "/api/v3/trades", params=params)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def depth(self, *, symbol: str, limit: int = 50) -> dict[str, Any]:
+        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
+        return await self._request("GET", "/api/v3/depth", params=params)
+```
+
+## File: src/app/interfaces/http/api/market_routes.py
+```python
+from fastapi import APIRouter, Depends, Query
+
+from src.app.application.market.use_cases.get_depth import GetDepthInput, GetDepthUseCase
+from src.app.application.market.use_cases.get_kline import GetKlineInput, GetKlineUseCase
+from src.app.application.market.use_cases.get_market_trades import (
+    GetMarketTradesInput,
+    GetMarketTradesUseCase,
+)
+from src.app.application.market.use_cases.get_stats24h import GetStats24hUseCase
+from src.app.application.market.use_cases.get_ticker import GetTickerUseCase
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.application.trading.qrl.cancel_qrl_order import CancelQrlOrder
-from src.app.application.trading.qrl.get_qrl_order import GetQrlOrder
-from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
-from src.app.application.account.use_cases.get_balance import GetBalanceUseCase
-from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
-from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
 from src.app.interfaces.http.dependencies import get_exchange_factory
-from src.app.interfaces.http.schemas import PlaceOrderRequest
 
 router = APIRouter()
 
 
-@router.get("/price")
-async def qrl_price(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
-    usecase = GetQrlPrice(exchange_factory)
-    try:
-        snapshot = await usecase.execute()
-        return snapshot.to_dict()
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL price: {exc}") from exc
+@router.get("/depth")
+async def get_depth(
+    limit: int = Query(default=50, ge=5, le=1000),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Get order book depth for QRL/USDT."""
+    usecase = GetDepthUseCase(exchange_factory)
+    return await usecase.execute(data=GetDepthInput(limit=limit))
+
+
+@router.get("/ticker")
+async def get_ticker(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
+    """Get ticker for QRL/USDT."""
+    usecase = GetTickerUseCase(exchange_factory)
+    return await usecase.execute()
 
 
 @router.get("/kline")
-async def qrl_kline(
+async def get_kline(
     interval: str = Query(default="1m"),
     limit: int = Query(default=50, ge=1, le=500),
     exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
-    usecase = GetQrlKline(exchange_factory, interval=interval, limit=limit)
-    try:
-        raw = await usecase.execute()
-        normalized = [
-            {"timestamp": item[0], "open": item[1], "high": item[2], "low": item[3], "close": item[4], "volume": item[5]}
-            for item in raw
-        ]
-        return normalized
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL klines: {exc}") from exc
+    """Get kline data for QRL/USDT."""
+    usecase = GetKlineUseCase(exchange_factory)
+    return await usecase.execute(data=GetKlineInput(interval=interval, limit=limit))
 
 
-@router.get("/depth")
-async def qrl_depth(
-    limit: int = Query(default=50, ge=5, le=1000),
+@router.get("/stats24h")
+async def get_stats_24h(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
+    """Get 24h statistics for QRL/USDT."""
+    usecase = GetStats24hUseCase(exchange_factory)
+    return await usecase.execute()
+
+
+@router.get("/trades")
+async def get_market_trades(
+    limit: int = Query(default=50, ge=1, le=500),
     exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
-    usecase = GetQrlDepth(exchange_factory, limit=limit)
-    try:
-        return await usecase.execute()
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL depth: {exc}") from exc
-
-
-@router.post("/orders")
-async def qrl_place_order(
-    request: PlaceOrderRequest, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
-):
-    usecase = PlaceQrlOrder(exchange_factory)
-    return await usecase.execute(
-        side=request.side,
-        order_type=request.order_type,
-        price=request.price,
-        quantity=request.quantity,
-        time_in_force=request.time_in_force,
-        client_order_id=request.client_order_id,
-    )
-
-
-@router.post("/orders/{order_id}/cancel")
-async def qrl_cancel_order(
-    order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
-):
-    usecase = CancelQrlOrder(exchange_factory)
-    return await usecase.execute(order_id=order_id, client_order_id=None)
-
-
-@router.get("/orders/{order_id}")
-async def qrl_get_order(order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
-    usecase = GetQrlOrder(exchange_factory)
-    return await usecase.execute(order_id=order_id, client_order_id=None)
-
-
-@router.get("/summary")
-async def qrl_summary(
-    interval: str = Query(default="1m"),
-    kline_limit: int = Query(default=50, ge=1, le=500),
-    depth_limit: int = Query(default=50, ge=5, le=1000),
-    trades_limit: int = Query(default=50, ge=1, le=500),
-    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
-):
-    """Aggregate price, kline, depth, and balance for dashboard consumption."""
-    price_uc = GetQrlPrice(exchange_factory)
-    kline_uc = GetQrlKline(exchange_factory, interval=interval, limit=kline_limit)
-    depth_uc = GetQrlDepth(exchange_factory, limit=depth_limit)
-    balance_uc = GetBalanceUseCase(exchange_factory)
-    orders_uc = ListOrdersUseCase(exchange_factory)
-    trades_uc = ListTradesUseCase(exchange_factory)
-    market_trades_uc = GetMarketTradesUseCase(exchange_factory)
-
-    price_result, kline_result, depth_result, balance_result, orders, trades, market_trades = await asyncio.gather(
-        price_uc.execute(),
-        kline_uc.execute(),
-        depth_uc.execute(),
-        balance_uc.execute(),
-        orders_uc.execute(symbol="QRLUSDT"),
-        trades_uc.execute("QRLUSDT"),
-        market_trades_uc.execute(),
-    )
-
-    normalized_klines = [
-        {"timestamp": item[0], "open": item[1], "high": item[2], "low": item[3], "close": item[4], "volume": item[5]}
-        for item in kline_result
-    ]
-    return {
-        "price": price_result.to_dict(),
-        "klines": normalized_klines,
-        "depth": depth_result,
-        "balance": balance_result,
-        "orders": orders,
-        "trades": trades,
-        "market_trades": market_trades[:trades_limit],
-    }
+    """Get recent public trades for QRL/USDT."""
+    usecase = GetMarketTradesUseCase(exchange_factory)
+    return await usecase.execute(data=GetMarketTradesInput(limit=limit))
 ```
 
 ## File: src/app/interfaces/http/api/tasks_routes.py
 ```python
-import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException
 import httpx
+from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
 from src.app.interfaces.http.schemas import AllocationResponse
@@ -4906,14 +4323,14 @@ async def _trigger_allocation() -> AllocationResponse:
     """Run the allocation task and normalize the response."""
     try:
         result = await entrypoints.run_allocation()
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Allocation task exceeded timeout")
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Allocation task exceeded timeout") from None
     except (ValidationError, httpx.HTTPError) as exc:
         logger.exception("Allocation failed due to configuration or upstream API error")
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception:
         logger.exception("Unexpected allocation failure")
-        raise HTTPException(status_code=500, detail="Allocation task failed")
+        raise HTTPException(status_code=500, detail="Allocation task failed") from None
     return AllocationResponse.model_validate(result)
 
 
@@ -5303,6 +4720,59 @@ async def trigger_allocation_api() -> AllocationResponse:
 </html>
 ```
 
+## File: src/app/application/trading/qrl/place_qrl_order.py
+```python
+from decimal import Decimal
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory, PlaceOrderRequest
+from src.app.application.trading.use_cases.place_order import _serialize_order
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.qrl_quantity import QrlQuantity
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.time_in_force import TimeInForce
+
+
+class PlaceQrlOrder:
+    """Place QRL/USDT order with fixed symbol and validated VOs."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(  # noqa: PLR0913
+        self,
+        *,
+        side: str,
+        order_type: str,
+        price: Decimal | str | float | QrlPrice | None,
+        quantity: Decimal | str | int | float | QrlQuantity,
+        time_in_force: str | None = "GTC",
+        client_order_id: str | None = None,
+    ) -> dict:
+        price_vo = None
+        if price is not None:
+            normalized_price = price if isinstance(price, QrlPrice) else QrlPrice(price)
+            price_vo = Price.from_single(normalized_price.value)
+
+        normalized_qty = quantity if isinstance(quantity, QrlQuantity) else QrlQuantity(quantity)
+        quantity_vo = Quantity(normalized_qty.value)
+        request = PlaceOrderRequest(
+            symbol=Symbol("QRLUSDT"),
+            side=Side(side),
+            order_type=OrderType(order_type),
+            price=price_vo,
+            quantity=quantity_vo,
+            time_in_force=TimeInForce(time_in_force) if time_in_force else None,
+            client_order_id=client_order_id,
+        )
+        async with self._exchange_factory() as exchange:
+            order = await exchange.place_order(request)
+        return _serialize_order(order)
+```
+
 ## File: src/app/application/trading/use_cases/list_trades.py
 ```python
 """Trading use case: list trades for QRL/USDT."""
@@ -5410,11 +4880,641 @@ class PlaceOrderUseCase:
         return _serialize_order(order)
 ```
 
+## File: src/app/infrastructure/exchange/mexc/factories.py
+```python
+"""
+Factories to translate MEXC REST/WebSocket DTOs into domain aggregates.
+
+These implementations are intentionally lightweight placeholders. They ensure
+that aggregate construction paths are present and wired, while allowing the
+future work to enrich the mapping with full business rules.
+"""
+
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from decimal import Decimal
+
+from src.app.domain.aggregates.account_state import AccountState
+from src.app.domain.aggregates.market_snapshot import MarketSnapshot
+from src.app.domain.aggregates.trading_session import TradingSession
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.kline import Kline
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.order_book_level import OrderBookLevel
+from src.app.domain.entities.trade import Trade
+from src.app.domain.factories.aggregates import (
+    build_account_state,
+    build_market_snapshot,
+    build_trading_session,
+)
+from src.app.domain.value_objects.balance import Balance
+from src.app.domain.value_objects.kline_interval import KlineInterval
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_side import OrderSide
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.domain.value_objects.trade_id import TradeId
+from src.app.infrastructure.exchange.mexc.generated import (
+    PrivateAccountV3Api_pb2,
+    PrivateOrdersV3Api_pb2,
+    PublicAggreDealsV3Api_pb2,
+    PublicAggreDepthsV3Api_pb2,
+    PublicBookTickerV3Api_pb2,
+    PublicSpotKlineV3Api_pb2,
+)
+
+
+def _default_timestamp() -> Timestamp:
+    return Timestamp(datetime.now(UTC))
+
+
+def _levels_from_depth(
+    depth: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api | None,
+) -> tuple[list[OrderBookLevel], list[OrderBookLevel]]:
+    if depth is None:
+        return [], []
+
+    bids = [
+        OrderBookLevel(
+            price=Decimal(str(item.price)),
+            quantity=Decimal(str(item.quantity)),
+            side=OrderSide("BUY"),
+        )
+        for item in getattr(depth, "bids", [])  # type: ignore[attr-defined]
+    ]
+    asks = [
+        OrderBookLevel(
+            price=Decimal(str(item.price)),
+            quantity=Decimal(str(item.quantity)),
+            side=OrderSide("SELL"),
+        )
+        for item in getattr(depth, "asks", [])  # type: ignore[attr-defined]
+    ]
+    return bids, asks
+
+
+def market_snapshot_from_sources(
+    symbol: Symbol,
+    depth_proto: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api | None = None,
+    trades: Iterable[Trade] | None = None,
+    ticker_proto: PublicBookTickerV3Api_pb2.PublicBookTickerV3Api | None = None,
+) -> MarketSnapshot:
+    """
+    Build a MarketSnapshot aggregate from available feed DTOs.
+
+    The function accepts partial data (depth only, depth + trades, etc.) so
+    the callers can incrementally enrich the snapshot.
+    """
+
+    bids, asks = _levels_from_depth(depth_proto)
+    ticker: Ticker | None = None
+    if ticker_proto is not None:
+        bid = Decimal(str(getattr(ticker_proto, "bidPrice", 0)))
+        ask = Decimal(str(getattr(ticker_proto, "askPrice", 0)))
+        last = Decimal(str(getattr(ticker_proto, "lastPrice", 0)))
+        if bid > 0 and ask > 0 and last > 0:
+            ticker = Ticker(
+                symbol=symbol,
+                last_price=last,
+                bid_price=bid,
+                ask_price=ask,
+                ts=_default_timestamp().value,
+            )
+
+    return build_market_snapshot(
+        symbol=symbol,
+        bids=bids,
+        asks=asks,
+        trades=list(trades or []),
+        ticker=ticker,
+    )
+
+
+def account_state_from_proto(
+    symbol: Symbol, account_proto: PrivateAccountV3Api_pb2.PrivateAccountV3Api
+) -> AccountState:
+    """
+    Translate private account snapshot DTO into AccountState aggregate.
+
+    Balance parsing is intentionally minimal; further normalization can be
+    implemented when business rules are ready.
+    """
+
+    balances: list[Balance] = []
+    for item in getattr(account_proto, "balances", []):  # type: ignore[attr-defined]
+        balances.append(
+            Balance(
+                asset=getattr(item, "asset", ""),
+                free=Decimal(str(getattr(item, "free", 0))),
+                locked=Decimal(str(getattr(item, "locked", 0))),
+            )
+        )
+
+    account = Account(
+        can_trade=bool(getattr(account_proto, "canTrade", True)),
+        update_time=_default_timestamp(),
+        balances=balances,
+    )
+    return build_account_state(symbol=symbol, account=account, open_orders=[])
+
+
+def trading_session_from_orders(
+    symbol: Symbol, orders: Iterable[Order] | None = None, trades: Iterable[Trade] | None = None
+) -> TradingSession:
+    """Create a TradingSession aggregate from existing order/trade records."""
+
+    return build_trading_session(symbol=symbol, orders=orders or [], trades=trades or [])
+
+
+def trades_from_public_proto(
+    symbol: Symbol, deals_proto: PublicAggreDealsV3Api_pb2.PublicAggreDealsV3Api | None = None
+) -> list[Trade]:
+    """Convert public trades DTO to domain trades (skeleton mapping)."""
+
+    if deals_proto is None:
+        return []
+
+    trades: list[Trade] = []
+    for item in getattr(deals_proto, "deals", []):  # type: ignore[attr-defined]
+        trade_id_str = str(getattr(item, "tradeId", "0"))
+        order_id_str = str(getattr(item, "orderId", "0"))
+        trades.append(
+            Trade(
+                trade_id=TradeId(trade_id_str),
+                order_id=OrderId(order_id_str),
+                symbol=symbol,
+                side=(
+                    OrderSide("BUY")
+                    if bool(getattr(item, "isBuyerMaker", False))
+                    else OrderSide("SELL")
+                ),
+                price=Decimal(str(getattr(item, "price", 0))),
+                quantity=Decimal(str(getattr(item, "quantity", 0))),
+                fee=None,
+                fee_asset=None,
+                timestamp=_default_timestamp(),
+            )
+        )
+    return trades
+
+
+def klines_from_proto(
+    symbol: Symbol, kline_proto: PublicSpotKlineV3Api_pb2.PublicSpotKlineV3Api | None = None
+) -> list[Kline]:
+    """Convert spot kline DTOs to domain klines (skeleton mapping)."""
+
+    if kline_proto is None:
+        return []
+
+    klines: list[Kline] = []
+    interval = KlineInterval(str(getattr(kline_proto, "interval", "1m")))
+    for item in getattr(kline_proto, "klineList", []):  # type: ignore[attr-defined]
+        open_time_ms = int(getattr(item, "openTime", 0))
+        close_time_ms = int(getattr(item, "closeTime", 0))
+        klines.append(
+            Kline(
+                symbol=symbol,
+                interval=interval,
+                open=Decimal(str(getattr(item, "open", 0))),
+                high=Decimal(str(getattr(item, "high", 0))),
+                low=Decimal(str(getattr(item, "low", 0))),
+                close=Decimal(str(getattr(item, "close", 0))),
+                volume=Decimal(str(getattr(item, "volume", 0))),
+                open_time=Timestamp(datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)),
+                close_time=Timestamp(datetime.fromtimestamp(close_time_ms / 1000, tz=UTC)),
+            )
+        )
+    return klines
+
+
+def orders_from_private_proto(
+    symbol: Symbol, orders_proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api | None = None
+) -> list[Order]:
+    """Convert private orders DTO to domain orders (skeleton mapping)."""
+
+    if orders_proto is None:
+        return []
+
+    orders: list[Order] = []
+    for item in getattr(orders_proto, "orders", []):  # type: ignore[attr-defined]
+        orders.append(
+            Order(
+                order_id=OrderId(str(getattr(item, "orderId", ""))),
+                symbol=symbol,
+                side=OrderSide(str(getattr(item, "side", "BUY"))),
+                order_type=OrderType(str(getattr(item, "type", "LIMIT"))),
+                status=OrderStatus(str(getattr(item, "status", "NEW"))),
+                price=Decimal(str(getattr(item, "price", 0))),
+                quantity=Quantity(Decimal(str(getattr(item, "origQty", 0)))),
+                created_at=_default_timestamp(),
+                time_in_force=None,
+                client_order_id=(
+                    str(getattr(item, "clientOrderId", ""))
+                    if getattr(item, "clientOrderId", None)
+                    else None
+                ),
+                executed_quantity=Decimal(str(getattr(item, "executedQty", 0))),
+                cumulative_quote_quantity=Decimal(str(getattr(item, "cummulativeQuoteQty", 0))),
+                updated_at=_default_timestamp(),
+            )
+        )
+    return orders
+```
+
+## File: src/app/infrastructure/exchange/mexc/qrl/qrl_rest_client.py
+```python
+from src.app.domain.value_objects.qrl_usdt_pair import QrlUsdtPair
+from src.app.infrastructure.exchange.mexc.rest_client import MexcRestClient
+from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+
+
+class QrlRestClient:
+    """Wrapper to freeze symbol to QRL/USDT for all REST calls."""
+
+    def __init__(self, settings: MexcSettings):
+        self._settings = settings
+        self._client = MexcRestClient(settings)
+
+    async def __aenter__(self) -> "QrlRestClient":
+        await self._client.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self._client.__aexit__(exc_type, exc, tb)
+
+    async def ticker_24h(self) -> dict:
+        return await self._client.ticker_24h(symbol=QrlUsdtPair.symbol())
+
+    async def klines(self, *, interval: str, limit: int) -> list:
+        return await self._client.klines(
+            symbol=QrlUsdtPair.symbol(), interval=interval, limit=limit
+        )
+
+    async def depth(self, *, limit: int = 50) -> dict:
+        return await self._client.depth(symbol=QrlUsdtPair.symbol(), limit=limit)
+
+    async def market_trades(self, *, limit: int = 50) -> list:
+        return await self._client.trades(symbol=QrlUsdtPair.symbol(), limit=limit)
+
+    async def create_order(  # noqa: PLR0913
+        self,
+        *,
+        side: str,
+        order_type: str,
+        quantity: str,
+        price: str | None,
+        time_in_force: str | None,
+        client_order_id: str | None,
+    ) -> dict:
+        return await self._client.create_order(
+            symbol=QrlUsdtPair.symbol(),
+            side=side,
+            order_type=order_type,
+            quantity=quantity,
+            price=price,
+            time_in_force=time_in_force,
+            client_order_id=client_order_id,
+        )
+
+    async def get_order(self, *, order_id: str | None, client_order_id: str | None) -> dict:
+        return await self._client.get_order(
+            symbol=QrlUsdtPair.symbol(), order_id=order_id, client_order_id=client_order_id
+        )
+
+    async def cancel_order(self, *, order_id: str | None, client_order_id: str | None) -> dict:
+        return await self._client.cancel_order(
+            symbol=QrlUsdtPair.symbol(), order_id=order_id, client_order_id=client_order_id
+        )
+```
+
+## File: src/app/interfaces/http/api/trading_api.py
+```python
+from fastapi import APIRouter, Depends, Query
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.application.trading.use_cases.get_kline import GetKlineUseCase
+from src.app.application.trading.use_cases.get_price import GetPriceUseCase
+from src.app.interfaces.http.dependencies import get_exchange_factory
+
+router = APIRouter()
+
+
+@router.get("/api/price/{symbol}")
+async def get_price(
+    symbol: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+):
+    usecase = GetPriceUseCase(exchange_factory)
+    return await usecase.execute(symbol)
+
+
+@router.get("/api/kline/{symbol}/{interval}")
+async def get_kline(
+    symbol: str,
+    interval: str,
+    limit: int = Query(default=60, ge=1, le=500),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    usecase = GetKlineUseCase(exchange_factory)
+    return await usecase.execute(symbol, interval, limit)
+```
+
+## File: src/app/interfaces/http/api/trading_routes.py
+```python
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, Query
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.application.trading.use_cases.cancel_order import CancelOrderInput, CancelOrderUseCase
+from src.app.application.trading.use_cases.get_order import GetOrderInput, GetOrderUseCase
+from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
+from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
+from src.app.application.trading.use_cases.place_order import PlaceOrderInput, PlaceOrderUseCase
+from src.app.interfaces.http.dependencies import get_exchange_factory
+from src.app.interfaces.http.schemas import (
+    PlaceOrderRequest,
+)
+
+router = APIRouter()
+
+
+@router.post("/orders")
+async def place_order(
+    request: PlaceOrderRequest,
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Place spot order for QRL/USDT (subaccount)."""
+    usecase = PlaceOrderUseCase(exchange_factory)
+    data = PlaceOrderInput(
+        symbol=request.symbol,
+        side=request.side,
+        quantity=Decimal(request.quantity),
+        price=Decimal(request.price) if request.price is not None else None,
+        order_type=request.order_type,
+        time_in_force=request.time_in_force if request.time_in_force else "GTC",
+        client_order_id=request.client_order_id,
+    )
+    return await usecase.execute(data)
+
+
+@router.post("/orders/{order_id}/cancel")
+async def cancel_order(
+    order_id: str,
+    symbol: str = Query(default="QRLUSDT"),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Cancel an existing order."""
+    usecase = CancelOrderUseCase(exchange_factory)
+    data = CancelOrderInput(symbol=symbol, order_id=order_id, client_order_id=None)
+    return await usecase.execute(data)
+
+
+@router.get("/orders/{order_id}")
+async def get_order(
+    order_id: str,
+    symbol: str = Query(default="QRLUSDT"),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Get order status."""
+    usecase = GetOrderUseCase(exchange_factory)
+    data = GetOrderInput(symbol=symbol, order_id=order_id, client_order_id=None)
+    return await usecase.execute(data)
+
+
+@router.get("/orders")
+async def list_orders(
+    symbol: str = Query(default="QRLUSDT"),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """List recent orders."""
+    usecase = ListOrdersUseCase(exchange_factory)
+    return await usecase.execute(symbol=symbol)
+
+
+@router.get("/trades")
+async def list_trades(
+    symbol: str = Query(default="QRLUSDT"),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """List recent trades."""
+    usecase = ListTradesUseCase(exchange_factory)
+    return await usecase.execute(symbol)
+```
+
+## File: src/app/interfaces/http/schemas.py
+```python
+"""Pydantic schemas for interface layer requests/responses."""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class PlaceOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    side: Literal["BUY", "SELL"]
+    order_type: Literal["LIMIT", "MARKET"] = Field(default="LIMIT", alias="type")
+    quantity: Decimal
+    price: Decimal | None = None
+    time_in_force: Literal["GTC", "IOC", "FOK"] | None = Field(default="GTC", alias="timeInForce")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class CancelOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    order_id: str | None = Field(default=None, alias="orderId")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class GetOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    order_id: str | None = Field(default=None, alias="orderId")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class ListTradesRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+
+
+class AllocationResponse(BaseModel):
+    """Response returned when the allocation task is triggered."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: str = Field(description="Identifier for the allocation trigger")
+    status: str = Field(description="Execution status for the allocation task")
+    executed_at: datetime = Field(description="UTC timestamp when the task executed")
+    action: str = Field(description="Trade action executed (BUY, SELL, SKIP, REJECTED)")
+    order_id: str | None = Field(
+        default=None, description="Order identifier returned by the exchange"
+    )
+    reason: str | None = Field(
+        default=None, description="Reason when action is skipped or rejected"
+    )
+    slippage_pct: Decimal | None = Field(
+        default=None, description="Calculated slippage percentage for the planned order"
+    )
+    expected_fill: Decimal | None = Field(
+        default=None, description="Expected fill quantity based on current depth"
+    )
+```
+
+## File: src/app/interfaces/http/api/qrl_routes.py
+```python
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from src.app.application.account.use_cases.get_balance import GetBalanceUseCase
+from src.app.application.market.qrl.get_qrl_depth import GetQrlDepth
+from src.app.application.market.qrl.get_qrl_kline import GetQrlKline
+from src.app.application.market.qrl.get_qrl_price import GetQrlPrice
+from src.app.application.market.use_cases.get_market_trades import GetMarketTradesUseCase
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.application.trading.qrl.cancel_qrl_order import CancelQrlOrder
+from src.app.application.trading.qrl.get_qrl_order import GetQrlOrder
+from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
+from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
+from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
+from src.app.interfaces.http.dependencies import get_exchange_factory
+from src.app.interfaces.http.schemas import PlaceOrderRequest
+
+router = APIRouter()
+
+
+@router.get("/price")
+async def qrl_price(exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
+    usecase = GetQrlPrice(exchange_factory)
+    try:
+        snapshot = await usecase.execute()
+        return snapshot.to_dict()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL price: {exc}") from exc
+
+
+@router.get("/kline")
+async def qrl_kline(
+    interval: str = Query(default="1m"),
+    limit: int = Query(default=50, ge=1, le=500),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    usecase = GetQrlKline(exchange_factory, interval=interval, limit=limit)
+    try:
+        raw = await usecase.execute()
+        normalized = [
+            {
+                "timestamp": item[0], "open": item[1], "high": item[2],
+                "low": item[3], "close": item[4], "volume": item[5],
+            }
+            for item in raw
+        ]
+        return normalized
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL klines: {exc}") from exc
+
+
+@router.get("/depth")
+async def qrl_depth(
+    limit: int = Query(default=50, ge=5, le=1000),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    usecase = GetQrlDepth(exchange_factory, limit=limit)
+    try:
+        return await usecase.execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch QRL depth: {exc}") from exc
+
+
+@router.post("/orders")
+async def qrl_place_order(
+    request: PlaceOrderRequest,
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    usecase = PlaceQrlOrder(exchange_factory)
+    return await usecase.execute(
+        side=request.side,
+        order_type=request.order_type,
+        price=request.price,
+        quantity=request.quantity,
+        time_in_force=request.time_in_force,
+        client_order_id=request.client_order_id,
+    )
+
+
+@router.post("/orders/{order_id}/cancel")
+async def qrl_cancel_order(
+    order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+):
+    usecase = CancelQrlOrder(exchange_factory)
+    return await usecase.execute(order_id=order_id, client_order_id=None)
+
+
+@router.get("/orders/{order_id}")
+async def qrl_get_order(
+    order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+):
+    usecase = GetQrlOrder(exchange_factory)
+    return await usecase.execute(order_id=order_id, client_order_id=None)
+
+
+@router.get("/summary")
+async def qrl_summary(
+    interval: str = Query(default="1m"),
+    kline_limit: int = Query(default=50, ge=1, le=500),
+    depth_limit: int = Query(default=50, ge=5, le=1000),
+    trades_limit: int = Query(default=50, ge=1, le=500),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Aggregate price, kline, depth, and balance for dashboard consumption."""
+    price_uc = GetQrlPrice(exchange_factory)
+    kline_uc = GetQrlKline(exchange_factory, interval=interval, limit=kline_limit)
+    depth_uc = GetQrlDepth(exchange_factory, limit=depth_limit)
+    balance_uc = GetBalanceUseCase(exchange_factory)
+    orders_uc = ListOrdersUseCase(exchange_factory)
+    trades_uc = ListTradesUseCase(exchange_factory)
+    market_trades_uc = GetMarketTradesUseCase(exchange_factory)
+
+    (
+        price_result, kline_result, depth_result, balance_result, orders, trades, market_trades
+    ) = await asyncio.gather(
+        price_uc.execute(),
+        kline_uc.execute(),
+        depth_uc.execute(),
+        balance_uc.execute(),
+        orders_uc.execute(symbol="QRLUSDT"),
+        trades_uc.execute("QRLUSDT"),
+        market_trades_uc.execute(),
+    )
+
+    normalized_klines = [
+        {
+            "timestamp": item[0], "open": item[1], "high": item[2],
+            "low": item[3], "close": item[4], "volume": item[5],
+        }
+        for item in kline_result
+    ]
+    return {
+        "price": price_result.to_dict(),
+        "klines": normalized_klines,
+        "depth": depth_result,
+        "balance": balance_result,
+        "orders": orders,
+        "trades": trades,
+        "market_trades": market_trades[:trades_limit],
+    }
+```
+
 ## File: src/app/infrastructure/exchange/mexc/mappers.py
 ```python
 """Mapping helpers between MEXC API payloads and domain objects."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -5426,13 +5526,13 @@ from src.app.domain.value_objects.order_book import DepthLevel, OrderBook
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
 from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.qrl_price import QrlPrice
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.time_in_force import TimeInForce
 from src.app.domain.value_objects.timestamp import Timestamp
 from src.app.domain.value_objects.trade_id import TradeId
-from src.app.domain.value_objects.qrl_price import QrlPrice
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -5447,7 +5547,7 @@ def _to_timestamp_from_ms(value: int | float | str) -> Timestamp:
             ms_value = int(value)
         except (TypeError, ValueError):
             ms_value = 0
-    dt = datetime.fromtimestamp(ms_value / 1000, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ms_value / 1000, tz=UTC)
     return Timestamp(dt)
 
 
@@ -5457,7 +5557,11 @@ def server_time_to_timestamp(payload: dict[str, Any]) -> Timestamp:
 
 def account_from_api(payload: dict[str, Any]) -> Account:
     balances = [
-        Balance(asset=item["asset"], free=_to_decimal(item["free"]), locked=_to_decimal(item["locked"]))
+        Balance(
+                asset=item["asset"],
+                free=_to_decimal(item["free"]),
+                locked=_to_decimal(item["locked"]),
+            )
         for item in payload.get("balances", [])
     ]
     return Account(
@@ -5485,7 +5589,9 @@ def order_from_api(payload: dict[str, Any]) -> Order:
         order_type=OrderType(payload.get("type", "LIMIT")),
         status=OrderStatus(payload.get("status", "NEW")),
         price=price_vo,
-        quantity=Quantity(_to_decimal(payload.get("origQty", payload.get("quantity", "0.00000001")))),
+        quantity=Quantity(_to_decimal(
+            payload.get("origQty", payload.get("quantity", "0.00000001"))
+        )),
         time_in_force=TimeInForce(payload["timeInForce"]) if payload.get("timeInForce") else None,
         created_at=_to_timestamp_from_ms(payload.get("transactTime", payload.get("createTime", 0))),
         client_order_id=payload.get("clientOrderId") or payload.get("origClientOrderId"),
@@ -5495,7 +5601,7 @@ def order_from_api(payload: dict[str, Any]) -> Order:
         cumulative_quote_quantity=_to_decimal(payload.get("cummulativeQuoteQty", "0"))
         if payload.get("cummulativeQuoteQty") is not None
         else None,
-        updated_at=_to_timestamp_from_ms(payload["updateTime"]) if payload.get("updateTime") else None,
+        updated_at=_to_timestamp_from_ms(payload["updateTime"]) if payload.get("updateTime") else None,  # noqa: E501
     )
 
 
@@ -5518,7 +5624,7 @@ def _parse_levels(raw: Any) -> list[DepthLevel]:
     if not isinstance(raw, list):
         return levels
     for item in raw:
-        if not isinstance(item, (list, tuple)) or len(item) < 2:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:  # noqa: PLR2004
             continue
         try:
             price = _to_decimal(item[0])
@@ -5543,7 +5649,7 @@ def order_book_from_api(payload: dict[str, Any]) -> OrderBook:
 """System use case to expose an allocation trigger for schedulers."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -5558,8 +5664,8 @@ from src.app.domain.services.slippage_analyzer import SlippageAnalyzer
 from src.app.domain.services.valuation_service import ValuationService
 from src.app.domain.value_objects.balance_comparison_result import BalanceComparisonResult
 from src.app.domain.value_objects.normalized_balances import NormalizedBalances
-from src.app.domain.value_objects.order_command import OrderCommand
 from src.app.domain.value_objects.order_book import OrderBook
+from src.app.domain.value_objects.order_command import OrderCommand
 from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.price import Price
 from src.app.domain.value_objects.quantity import Quantity
@@ -5619,7 +5725,7 @@ class AllocationUseCase:
     async def execute(self) -> AllocationResult:
         """Compare balances, evaluate depth/slippage, and submit a balancing order."""
         request_id = str(uuid4())
-        executed_at = datetime.now(timezone.utc)
+        executed_at = datetime.now(UTC)
         async with self._exchange_factory() as svc:
             account = await svc.get_account()
             try:
@@ -5642,7 +5748,9 @@ class AllocationUseCase:
             top_price = _best_price(order_book, comparison.preferred_side)
             if top_price <= 0 or best_bid <= 0 or best_ask <= 0:
                 return _result_from_slippage(
-                    request_id, executed_at, SlippageAssessment(Decimal("0"), Decimal("0"), False, "No executable depth")
+                    request_id,
+                    executed_at,
+                    SlippageAssessment(Decimal("0"), Decimal("0"), False, "No executable depth"),
                 )
             slippage = self._slippage_analyzer.assess(
                 side=comparison.preferred_side,
@@ -5664,10 +5772,14 @@ class AllocationUseCase:
                 return _result_from_slippage(
                     request_id,
                     executed_at,
-                    SlippageAssessment(Decimal("0"), Decimal("0"), False, "Cannot place maker limit"),
+                    SlippageAssessment(
+                        Decimal("0"), Decimal("0"), False, "Cannot place maker limit"
+                    ),
                 )
             command = _build_order_command(
-                side=comparison.preferred_side, quantity=self._target_quantity, limit_price=limit_price
+                side=comparison.preferred_side,
+                quantity=self._target_quantity,
+                limit_price=limit_price,
             )
             order = await svc.place_order(
                 PlaceOrderRequest(
@@ -5689,7 +5801,9 @@ class AllocationUseCase:
         )
 
 
-def _normalize_balances(account: Account, mid_price: Decimal, valuation: ValuationService) -> NormalizedBalances:
+def _normalize_balances(
+    account: Account, mid_price: Decimal, valuation: ValuationService
+) -> NormalizedBalances:
     """Return normalized balances using total (free + locked) holdings."""
     qrl_total = Decimal("0")
     usdt_total = Decimal("0")
@@ -5730,7 +5844,9 @@ def _best_ask(book: OrderBook) -> Decimal:
     return min(asks) if asks else Decimal("0")
 
 
-def _compute_limit_price(*, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal) -> Decimal | None:
+def _compute_limit_price(
+    *, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal
+) -> Decimal | None:
     """Return a maker-style limit price that does not cross the spread."""
     if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
         return None
