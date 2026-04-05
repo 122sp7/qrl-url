@@ -40,6 +40,9 @@
     setText("bal-qrl-locked", qrl.locked);
     setText("bal-usdt-free", usdt.free);
     setText("bal-usdt-locked", usdt.locked);
+    const valuation = payload.valuation || {};
+    const totalVal = valuation.total_value_usdt;
+    setText("bal-total-value", totalVal != null ? parseFloat(totalVal).toFixed(4) + " USDT" : "--");
   };
 
   const normalizeDepth = (item) => (Array.isArray(item) ? { price: item[0], qty: item[1] } : { price: item?.price ?? item?.p ?? "--", qty: item?.quantity ?? item?.q ?? "--" });
