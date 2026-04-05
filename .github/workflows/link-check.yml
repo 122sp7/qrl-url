@@ -1,0 +1,30 @@
+name: Check Broken Links
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '.github/workflows/link-check.yml'
+  pull_request:
+    paths:
+      - '**/*.md'
+      - '.github/workflows/link-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  link-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run broken link checker
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --root-dir "$(pwd)" --verbose --no-progress './**/*.md'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: true
+          jobSummary: true

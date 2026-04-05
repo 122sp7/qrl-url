@@ -1,0 +1,78 @@
+name: Cleanup Old Caches
+on:
+  schedule:
+    # 每天 UTC 00:00 執行 (台北時間 08:00)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 保留手動觸發按鈕，方便隨時測試
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete caches older than 48 hours
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const retentionHours = 24;
+            const cutoff = Date.now() - retentionHours * 60 * 60 * 1000;
+            let page = 1;
+            let deletedCount = 0;
+
+            while (true) {
+              const { data: { actions_caches: caches } } = await github.request("GET /repos/{owner}/{repo}/actions/caches", {
+                owner, repo, page, per_page: 100
+              });
+
+              if (!caches || caches.length === 0) break;
+
+              for (const cache of caches) {
+                const createdAt = Date.parse(cache.created_at);
+                if (createdAt < cutoff) {
+                  core.info(`Deleting cache ${cache.id} (${cache.key})`);
+                  await github.request("DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}", {
+                    owner, repo, cache_id: cache.id
+                  });
+                  deletedCount++;
+                }
+              }
+              page++;
+            }
+            core.info(`Successfully deleted ${deletedCount} cache(s) older than 24 hours.`);
+
+      - name: Delete workflow runs older than 24 hours
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const retentionHours = 24;
+            const cutoff = Date.now() - retentionHours * 60 * 60 * 1000;
+            let page = 1;
+            let deletedCount = 0;
+
+            while (true) {
+              const { data: { workflow_runs: runs } } = await github.request("GET /repos/{owner}/{repo}/actions/runs", {
+                owner, repo, page, per_page: 100
+              });
+
+              if (!runs || runs.length === 0) break;
+
+              for (const run of runs) {
+                const createdAt = Date.parse(run.created_at);
+                if (run.status === "completed" && createdAt < cutoff) {
+                  core.info(`Deleting workflow run ${run.id} (${run.name})`);
+                  await github.request("DELETE /repos/{owner}/{repo}/actions/runs/{run_id}", {
+                    owner, repo, run_id: run.id
+                  });
+                  deletedCount++;
+                }
+              }
+              page++;
+            }
+            core.info(`Successfully deleted ${deletedCount} workflow run(s) older than 48 hours.`);
