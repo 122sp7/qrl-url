@@ -12,7 +12,7 @@ tags:
   - "oidc"
   - "iam"
 ai_note: "Generated with AI assistance"
-summary: "逐步教學：使用 scheduler@qrl-api.iam.gserviceaccount.com，讓 Cloud Scheduler 在 Windows 與 Linux 透過 OIDC 呼叫 Cloud Run 服務。"
+summary: "逐步教學：使用服務帳戶 scheduler@qrl-api.iam.gserviceaccount.com 讓 Cloud Scheduler 在 Windows 與 Linux 透過 OIDC 呼叫 Cloud Run 服務。"
 post_date: 2026-01-07
 ---
 

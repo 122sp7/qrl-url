@@ -68,16 +68,16 @@ description: DDD knowledge base for the MEXC QRL Trading Bot. Use when making ar
 
 | Topic | File |
 |-------|------|
-| Layer map + rules | [docs/ddd/README.md](docs/ddd/README.md) |
-| Canonical terms | [docs/ddd/ubiquitous-language.md](docs/ddd/ubiquitous-language.md) |
-| Context boundaries | [docs/ddd/bounded-contexts.md](docs/ddd/bounded-contexts.md) |
-| Subdomain types | [docs/ddd/subdomains.md](docs/ddd/subdomains.md) |
-| Context relationships | [docs/ddd/context-map.md](docs/ddd/context-map.md) |
-| Aggregate invariants | [docs/ddd/aggregates.md](docs/ddd/aggregates.md) |
-| Domain events | [docs/ddd/domain-events.md](docs/ddd/domain-events.md) |
-| Domain services | [docs/ddd/domain-services.md](docs/ddd/domain-services.md) |
-| Use case catalogue | [docs/ddd/application-services.md](docs/ddd/application-services.md) |
-| Repository pattern | [docs/ddd/repositories.md](docs/ddd/repositories.md) |
+| Layer map + rules | [docs/ddd/README.md](../../../docs/ddd/README.md) |
+| Canonical terms | [docs/ddd/ubiquitous-language.md](../../../docs/ddd/ubiquitous-language.md) |
+| Context boundaries | [docs/ddd/bounded-contexts.md](../../../docs/ddd/bounded-contexts.md) |
+| Subdomain types | [docs/ddd/subdomains.md](../../../docs/ddd/subdomains.md) |
+| Context relationships | [docs/ddd/context-map.md](../../../docs/ddd/context-map.md) |
+| Aggregate invariants | [docs/ddd/aggregates.md](../../../docs/ddd/aggregates.md) |
+| Domain events | [docs/ddd/domain-events.md](../../../docs/ddd/domain-events.md) |
+| Domain services | [docs/ddd/domain-services.md](../../../docs/ddd/domain-services.md) |
+| Use case catalogue | [docs/ddd/application-services.md](../../../docs/ddd/application-services.md) |
+| Repository pattern | [docs/ddd/repositories.md](../../../docs/ddd/repositories.md) |
 
 ## Enforcement Tools
 

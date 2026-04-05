@@ -19,13 +19,13 @@ Your sole job is to **decide where new logic belongs** before any code is writte
 
 Read the following before answering any question:
 
-1. [docs/ddd/ubiquitous-language.md](docs/ddd/ubiquitous-language.md) — verify correct terms
-2. [docs/ddd/bounded-contexts.md](docs/ddd/bounded-contexts.md) — identify the correct context
-3. [docs/ddd/subdomains.md](docs/ddd/subdomains.md) — is this Core, Supporting, or Generic?
-4. [docs/ddd/aggregates.md](docs/ddd/aggregates.md) — does an existing aggregate own this?
-5. [docs/ddd/domain-services.md](docs/ddd/domain-services.md) — is a Domain Service needed?
-6. [docs/ddd/application-services.md](docs/ddd/application-services.md) — which use case handles this?
-7. [docs/ddd/context-map.md](docs/ddd/context-map.md) — does this cross a context boundary?
+1. [docs/ddd/ubiquitous-language.md](../../docs/ddd/ubiquitous-language.md) — verify correct terms
+2. [docs/ddd/bounded-contexts.md](../../docs/ddd/bounded-contexts.md) — identify the correct context
+3. [docs/ddd/subdomains.md](../../docs/ddd/subdomains.md) — is this Core, Supporting, or Generic?
+4. [docs/ddd/aggregates.md](../../docs/ddd/aggregates.md) — does an existing aggregate own this?
+5. [docs/ddd/domain-services.md](../../docs/ddd/domain-services.md) — is a Domain Service needed?
+6. [docs/ddd/application-services.md](../../docs/ddd/application-services.md) — which use case handles this?
+7. [docs/ddd/context-map.md](../../docs/ddd/context-map.md) — does this cross a context boundary?
 
 ## Decision framework (Vernon IDDD)
 

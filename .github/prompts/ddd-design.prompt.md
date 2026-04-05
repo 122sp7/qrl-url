@@ -28,11 +28,11 @@ Before writing any code, analyse the request against the project's DDD knowledge
 6. Does this operation cross a context boundary? If yes, how (DTO / Domain Event)?
 
 Reference:
-- [Ubiquitous Language](docs/ddd/ubiquitous-language.md)
-- [Bounded Contexts](docs/ddd/bounded-contexts.md)
-- [Aggregates](docs/ddd/aggregates.md)
-- [Domain Services](docs/ddd/domain-services.md)
-- [Application Services](docs/ddd/application-services.md)
-- [Context Map](docs/ddd/context-map.md)
+- [Ubiquitous Language](../../docs/ddd/ubiquitous-language.md)
+- [Bounded Contexts](../../docs/ddd/bounded-contexts.md)
+- [Aggregates](../../docs/ddd/aggregates.md)
+- [Domain Services](../../docs/ddd/domain-services.md)
+- [Application Services](../../docs/ddd/application-services.md)
+- [Context Map](../../docs/ddd/context-map.md)
 
 Do **not** write implementation code — produce only the design decision and step-by-step plan.

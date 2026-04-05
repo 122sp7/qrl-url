@@ -20,7 +20,7 @@ Domain     → must NOT import application / interfaces / infrastructure
 Application → must NOT import infrastructure / interfaces
 Interfaces  → must NOT import infrastructure directly
 ```
-Reference: [docs/ddd/bounded-contexts.md](docs/ddd/bounded-contexts.md)
+Reference: [docs/ddd/bounded-contexts.md](../../docs/ddd/bounded-contexts.md)
 
 ## 2. Business Logic Placement
 - Domain logic inside use cases or controllers → CRITICAL
@@ -28,22 +28,22 @@ Reference: [docs/ddd/bounded-contexts.md](docs/ddd/bounded-contexts.md)
 - `if/else` business decisions in repositories → WARNING
 
 ## 3. Ubiquitous Language
-Compare all class/function/variable names against [docs/ddd/ubiquitous-language.md](docs/ddd/ubiquitous-language.md).
+Compare all class/function/variable names against [docs/ddd/ubiquitous-language.md](../../docs/ddd/ubiquitous-language.md).
 Flag any term that uses synonyms, abbreviations, or HTTP vocabulary in domain code.
 
 ## 4. Aggregate Rules
-Verify against [docs/ddd/aggregates.md](docs/ddd/aggregates.md):
+Verify against [docs/ddd/aggregates.md](../../docs/ddd/aggregates.md):
 - External code mutating child entities directly (bypass aggregate root)?
 - Cross-aggregate object references instead of identity references?
 
 ## 5. Application Use Case Structure
-Verify against [docs/ddd/application-services.md](docs/ddd/application-services.md):
+Verify against [docs/ddd/application-services.md](../../docs/ddd/application-services.md):
 - Accepts typed Command/Query (not primitives or dicts)?
 - Returns `Ok(...) | Err(...)` (Result pattern)?
 - No business logic (only orchestration)?
 
 ## 6. Domain Events
-Verify against [docs/ddd/domain-events.md](docs/ddd/domain-events.md):
+Verify against [docs/ddd/domain-events.md](../../docs/ddd/domain-events.md):
 - Named in past tense?
 - Frozen dataclass?
 - Not crossing boundaries as raw dicts?

@@ -9,14 +9,14 @@ model: Claude Sonnet 4.5
 You are a strict DDD architecture reviewer for this Python project.
 Before reviewing, load the project's DDD knowledge base from `docs/ddd/`:
 
-- [Layer map & rules](docs/ddd/README.md)
-- [Ubiquitous Language](docs/ddd/ubiquitous-language.md) — verify naming
-- [Bounded Contexts](docs/ddd/bounded-contexts.md) — verify context boundaries
-- [Aggregates](docs/ddd/aggregates.md) — verify invariant rules
-- [Domain Services](docs/ddd/domain-services.md) — verify service placement
-- [Application Services](docs/ddd/application-services.md) — verify use case structure
-- [Repositories](docs/ddd/repositories.md) — verify port/adapter separation
-- [Domain Events](docs/ddd/domain-events.md) — verify event immutability and naming
+- [Layer map & rules](../../docs/ddd/README.md)
+- [Ubiquitous Language](../../docs/ddd/ubiquitous-language.md) — verify naming
+- [Bounded Contexts](../../docs/ddd/bounded-contexts.md) — verify context boundaries
+- [Aggregates](../../docs/ddd/aggregates.md) — verify invariant rules
+- [Domain Services](../../docs/ddd/domain-services.md) — verify service placement
+- [Application Services](../../docs/ddd/application-services.md) — verify use case structure
+- [Repositories](../../docs/ddd/repositories.md) — verify port/adapter separation
+- [Domain Events](../../docs/ddd/domain-events.md) — verify event immutability and naming
 
 ## Layer boundaries to enforce
 
