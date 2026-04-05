@@ -3598,6 +3598,166 @@ class QrlRestClient:
         )
 ```
 
+## File: src/app/infrastructure/exchange/mexc/rest_client.py
+```python
+import hashlib
+import hmac
+import time
+from typing import Any
+from urllib.parse import urlencode
+
+import httpx
+
+from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+
+
+class MexcRestClient:
+    """Async REST client for MEXC spot API v3."""
+
+    def __init__(self, settings: MexcSettings):
+        self._settings = settings
+        self._client: httpx.AsyncClient | None = None
+
+    async def __aenter__(self) -> "MexcRestClient":
+        limits = httpx.Limits(
+            max_connections=self._settings.max_connections,
+            max_keepalive_connections=self._settings.max_keepalive_connections,
+            keepalive_expiry=self._settings.keepalive_expiry,
+        )
+        self._client = httpx.AsyncClient(
+            base_url=self._settings.base_url,
+            timeout=httpx.Timeout(self._settings.timeout),
+            limits=limits,
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+
+    def _assert_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            raise RuntimeError("MexcRestClient context has not been entered")
+        return self._client
+
+    def _signed_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        payload = {k: v for k, v in params.items() if v is not None}
+        if self._settings.sub_account_mode == "BROKER":
+            if self._settings.sub_account_name is not None:
+                payload.setdefault("subAccount", self._settings.sub_account_name)
+        elif self._settings.sub_account_id is not None:
+            payload.setdefault("subAccountId", self._settings.sub_account_id)
+        payload.setdefault("timestamp", int(time.time() * 1000))
+        payload.setdefault("recvWindow", self._settings.recv_window)
+        query = urlencode(payload, doseq=True)
+        signature = hmac.new(
+            self._settings.api_secret.encode("utf-8"),
+            query.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        payload["signature"] = signature
+        return payload
+
+    async def _request(
+        self, method: str, path: str, params: dict[str, Any] | None = None, signed: bool = False
+    ) -> dict[str, Any]:
+        client = self._assert_client()
+        request_params = self._signed_params(params or {}) if signed else params or {}
+        headers = {"X-MEXC-APIKEY": self._settings.api_key} if signed else None
+        response = await client.request(method, path, params=request_params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def ping(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/ping")
+
+    async def get_server_time(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/time")
+
+    async def get_account(self) -> dict[str, Any]:
+        return await self._request("GET", "/api/v3/account", signed=True)
+
+    async def create_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: str | None = None,
+        price: str | None = None,
+        time_in_force: str | None = None,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "side": side,
+            "type": order_type,
+            "quantity": quantity,
+            "price": price,
+            "timeInForce": time_in_force,
+            "newClientOrderId": client_order_id,
+        }
+        return await self._request("POST", "/api/v3/order", params=params, signed=True)
+
+    async def get_order(
+        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "orderId": order_id,
+            "origClientOrderId": client_order_id,
+        }
+        return await self._request("GET", "/api/v3/order", params=params, signed=True)
+
+    async def cancel_order(
+        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "symbol": symbol,
+            "orderId": order_id,
+            "origClientOrderId": client_order_id,
+        }
+        return await self._request("DELETE", "/api/v3/order", params=params, signed=True)
+
+    async def list_open_orders(self, *, symbol: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"symbol": symbol} if symbol else {}
+        result = await self._request("GET", "/api/v3/openOrders", params=params, signed=True)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def list_trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
+        result = await self._request("GET", "/api/v3/myTrades", params=params, signed=True)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def ticker_24h(self, *, symbol: str) -> dict[str, Any]:
+        params = {"symbol": symbol}
+        return await self._request("GET", "/api/v3/ticker/24hr", params=params)
+
+    async def klines(self, *, symbol: str, interval: str, limit: int = 100) -> list[list[Any]]:
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        result = await self._request("GET", "/api/v3/klines", params=params)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Public recent trades."""
+        params = {"symbol": symbol, "limit": limit}
+        result = await self._request("GET", "/api/v3/trades", params=params)
+        if isinstance(result, list):
+            return result
+        return []
+
+    async def depth(self, *, symbol: str, limit: int = 50) -> dict[str, Any]:
+        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
+        return await self._request("GET", "/api/v3/depth", params=params)
+```
+
 ## File: src/app/infrastructure/exchange/mexc/service.py
 ```python
 from decimal import Decimal
@@ -3718,6 +3878,52 @@ class MexcExchangeService(ExchangeService):
 
 def build_mexc_exchange_service(settings: MexcSettings) -> MexcExchangeService:
     return MexcExchangeService(settings)
+```
+
+## File: src/app/infrastructure/exchange/mexc/settings.py
+```python
+from typing import Literal
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class MexcSettings(BaseSettings):
+    """Configuration for MEXC REST client."""
+
+    api_key: str = Field(alias="MEXC_API_KEY")
+    api_secret: str = Field(alias="MEXC_SECRET_KEY")
+    base_url: str = Field(default="https://api.mexc.com", alias="MEXC_BASE_URL")
+    recv_window: int = Field(default=5000, alias="MEXC_RECV_WINDOW")
+    timeout: int = Field(default=10, alias="MEXC_TIMEOUT")
+    max_connections: int = Field(default=20, alias="MEXC_MAX_CONNECTIONS", gt=0)
+    max_keepalive_connections: int = Field(default=10, alias="MEXC_MAX_KEEPALIVE", gt=0)
+    keepalive_expiry: float = Field(default=15.0, alias="MEXC_KEEPALIVE_EXPIRY", gt=0)
+    sub_account_mode: Literal["SPOT", "BROKER"] = Field(default="SPOT", alias="SUB_ACCOUNT_MODE")
+    sub_account_id: int | str | None = Field(default=None, alias="SUB_ACCOUNT_ID")
+    sub_account_name: str | None = Field(default=None, alias="SUB_ACCOUNT_NAME")
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @field_validator("sub_account_mode")
+    @classmethod
+    def _uppercase_mode(cls, value: str) -> str:
+        return value.upper()
+
+    @field_validator("sub_account_id", "sub_account_name")
+    @classmethod
+    def _empty_to_none(cls, value: str | int | None) -> str | int | None:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
+
+    @field_validator("api_key", "api_secret")
+    @classmethod
+    def _strip_whitespace(cls, value: str) -> str:
+        cleaned = value.strip()
+        if "\n" in cleaned or "\r" in cleaned:
+            cleaned = cleaned.replace("\n", "").replace("\r", "")
+        return cleaned
 ```
 
 ## File: src/app/interfaces/http/api/account_routes.py
@@ -4517,212 +4723,6 @@ class OrderBook:
     asks: list[DepthLevel] = field(default_factory=list)
 ```
 
-## File: src/app/infrastructure/exchange/mexc/rest_client.py
-```python
-import hashlib
-import hmac
-import time
-from typing import Any
-from urllib.parse import urlencode
-
-import httpx
-
-from src.app.infrastructure.exchange.mexc.settings import MexcSettings
-
-
-class MexcRestClient:
-    """Async REST client for MEXC spot API v3."""
-
-    def __init__(self, settings: MexcSettings):
-        self._settings = settings
-        self._client: httpx.AsyncClient | None = None
-
-    async def __aenter__(self) -> "MexcRestClient":
-        limits = httpx.Limits(
-            max_connections=self._settings.max_connections,
-            max_keepalive_connections=self._settings.max_keepalive_connections,
-            keepalive_expiry=self._settings.keepalive_expiry,
-        )
-        self._client = httpx.AsyncClient(
-            base_url=self._settings.base_url,
-            timeout=httpx.Timeout(self._settings.timeout),
-            limits=limits,
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    def _assert_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            raise RuntimeError("MexcRestClient context has not been entered")
-        return self._client
-
-    def _signed_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        payload = {k: v for k, v in params.items() if v is not None}
-        if self._settings.sub_account_mode == "BROKER":
-            if self._settings.sub_account_name is not None:
-                payload.setdefault("subAccount", self._settings.sub_account_name)
-        elif self._settings.sub_account_id is not None:
-            payload.setdefault("subAccountId", self._settings.sub_account_id)
-        payload.setdefault("timestamp", int(time.time() * 1000))
-        payload.setdefault("recvWindow", self._settings.recv_window)
-        query = urlencode(payload, doseq=True)
-        signature = hmac.new(
-            self._settings.api_secret.encode("utf-8"),
-            query.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        payload["signature"] = signature
-        return payload
-
-    async def _request(
-        self, method: str, path: str, params: dict[str, Any] | None = None, signed: bool = False
-    ) -> dict[str, Any]:
-        client = self._assert_client()
-        request_params = self._signed_params(params or {}) if signed else params or {}
-        headers = {"X-MEXC-APIKEY": self._settings.api_key} if signed else None
-        response = await client.request(method, path, params=request_params, headers=headers)
-        response.raise_for_status()
-        return response.json()
-
-    async def ping(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/ping")
-
-    async def get_server_time(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/time")
-
-    async def get_account(self) -> dict[str, Any]:
-        return await self._request("GET", "/api/v3/account", signed=True)
-
-    async def create_order(
-        self,
-        *,
-        symbol: str,
-        side: str,
-        order_type: str,
-        quantity: str | None = None,
-        price: str | None = None,
-        time_in_force: str | None = None,
-        client_order_id: str | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "side": side,
-            "type": order_type,
-            "quantity": quantity,
-            "price": price,
-            "timeInForce": time_in_force,
-            "newClientOrderId": client_order_id,
-        }
-        return await self._request("POST", "/api/v3/order", params=params, signed=True)
-
-    async def get_order(
-        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "orderId": order_id,
-            "origClientOrderId": client_order_id,
-        }
-        return await self._request("GET", "/api/v3/order", params=params, signed=True)
-
-    async def cancel_order(
-        self, *, symbol: str, order_id: str | None = None, client_order_id: str | None = None
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "symbol": symbol,
-            "orderId": order_id,
-            "origClientOrderId": client_order_id,
-        }
-        return await self._request("DELETE", "/api/v3/order", params=params, signed=True)
-
-    async def list_open_orders(self, *, symbol: str | None = None) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"symbol": symbol} if symbol else {}
-        result = await self._request("GET", "/api/v3/openOrders", params=params, signed=True)
-        if isinstance(result, list):
-            return result
-        return []
-
-    async def list_trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
-        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
-        result = await self._request("GET", "/api/v3/myTrades", params=params, signed=True)
-        if isinstance(result, list):
-            return result
-        return []
-
-    async def ticker_24h(self, *, symbol: str) -> dict[str, Any]:
-        params = {"symbol": symbol}
-        return await self._request("GET", "/api/v3/ticker/24hr", params=params)
-
-    async def klines(self, *, symbol: str, interval: str, limit: int = 100) -> list[list[Any]]:
-        params = {"symbol": symbol, "interval": interval, "limit": limit}
-        result = await self._request("GET", "/api/v3/klines", params=params)
-        if isinstance(result, list):
-            return result
-        return []
-
-    async def trades(self, *, symbol: str, limit: int = 50) -> list[dict[str, Any]]:
-        """Public recent trades."""
-        params = {"symbol": symbol, "limit": limit}
-        result = await self._request("GET", "/api/v3/trades", params=params)
-        if isinstance(result, list):
-            return result
-        return []
-
-    async def depth(self, *, symbol: str, limit: int = 50) -> dict[str, Any]:
-        params: dict[str, Any] = {"symbol": symbol, "limit": limit}
-        return await self._request("GET", "/api/v3/depth", params=params)
-```
-
-## File: src/app/infrastructure/exchange/mexc/settings.py
-```python
-from typing import Literal
-
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class MexcSettings(BaseSettings):
-    """Configuration for MEXC REST client."""
-
-    api_key: str = Field(alias="MEXC_API_KEY")
-    api_secret: str = Field(alias="MEXC_SECRET_KEY")
-    base_url: str = Field(default="https://api.mexc.com", alias="MEXC_BASE_URL")
-    recv_window: int = Field(default=5000, alias="MEXC_RECV_WINDOW")
-    timeout: int = Field(default=10, alias="MEXC_TIMEOUT")
-    max_connections: int = Field(default=20, alias="MEXC_MAX_CONNECTIONS", gt=0)
-    max_keepalive_connections: int = Field(default=10, alias="MEXC_MAX_KEEPALIVE", gt=0)
-    keepalive_expiry: float = Field(default=15.0, alias="MEXC_KEEPALIVE_EXPIRY", gt=0)
-    sub_account_mode: Literal["SPOT", "BROKER"] = Field(default="SPOT", alias="SUB_ACCOUNT_MODE")
-    sub_account_id: int | str | None = Field(default=None, alias="SUB_ACCOUNT_ID")
-    sub_account_name: str | None = Field(default=None, alias="SUB_ACCOUNT_NAME")
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    @field_validator("sub_account_mode")
-    @classmethod
-    def _uppercase_mode(cls, value: str) -> str:
-        return value.upper()
-
-    @field_validator("sub_account_id", "sub_account_name")
-    @classmethod
-    def _empty_to_none(cls, value: str | int | None) -> str | int | None:
-        if isinstance(value, str) and value.strip() == "":
-            return None
-        return value
-
-    @field_validator("api_key", "api_secret")
-    @classmethod
-    def _strip_whitespace(cls, value: str) -> str:
-        cleaned = value.strip()
-        if "\n" in cleaned or "\r" in cleaned:
-            cleaned = cleaned.replace("\n", "").replace("\r", "")
-        return cleaned
-```
-
 ## File: src/app/interfaces/http/api/qrl_routes.py
 ```python
 import asyncio
@@ -4855,6 +4855,62 @@ async def qrl_summary(
         "trades": trades,
         "market_trades": market_trades[:trades_limit],
     }
+```
+
+## File: src/app/interfaces/http/api/tasks_routes.py
+```python
+import asyncio
+import logging
+
+from fastapi import APIRouter, HTTPException
+import httpx
+from pydantic import ValidationError
+
+from src.app.interfaces.http.schemas import AllocationResponse
+from src.app.interfaces.tasks import entrypoints
+
+router = APIRouter()
+api_router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _trigger_allocation() -> AllocationResponse:
+    """Run the allocation task and normalize the response."""
+    try:
+        result = await entrypoints.run_allocation()
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Allocation task exceeded timeout")
+    except (ValidationError, httpx.HTTPError) as exc:
+        logger.exception("Allocation failed due to configuration or upstream API error")
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception:
+        logger.exception("Unexpected allocation failure")
+        raise HTTPException(status_code=500, detail="Allocation task failed")
+    return AllocationResponse.model_validate(result)
+
+
+@router.api_route(
+    "/allocation",
+    methods=["POST", "GET"],
+    response_model=AllocationResponse,
+    tags=["tasks"],
+    name="tasks_allocation_trigger",
+)
+async def trigger_allocation() -> AllocationResponse:
+    """Endpoint for Cloud Scheduler to trigger an allocation run."""
+    return await _trigger_allocation()
+
+
+@api_router.api_route(
+    "/allocation",
+    methods=["POST", "GET"],
+    response_model=AllocationResponse,
+    tags=["tasks"],
+    name="api_tasks_allocation_trigger",
+)
+async def trigger_allocation_api() -> AllocationResponse:
+    """API-aligned alias to trigger allocation under the /api/tasks namespace."""
+    return await _trigger_allocation()
 ```
 
 ## File: src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js
@@ -5219,6 +5275,34 @@ async def qrl_summary(
 </html>
 ```
 
+## File: src/app/interfaces/tasks/entrypoints.py
+```python
+"""HTTP/Scheduler entrypoints for background tasks."""
+
+import asyncio
+import os
+
+from src.app.application.system.use_cases.allocation import AllocationResult, AllocationUseCase
+from src.app.interfaces.http.dependencies import build_exchange_factory
+
+
+def _allocation_timeout_seconds() -> float:
+    """Read the scheduler task timeout from the environment."""
+    raw: str | None = os.getenv("TASK_TIMEOUT_SECONDS", "20")
+    try:
+        return float(raw)
+    except ValueError:
+        return 20.0
+
+
+async def run_allocation(timeout_seconds: float | None = None) -> AllocationResult:
+    """Trigger the allocation use case for Cloud Scheduler with a bounded runtime."""
+    exchange_factory = build_exchange_factory()
+    usecase = AllocationUseCase(exchange_factory)
+    timeout = timeout_seconds or _allocation_timeout_seconds()
+    return await asyncio.wait_for(usecase.execute(), timeout=timeout)
+```
+
 ## File: src/app/application/trading/use_cases/list_trades.py
 ```python
 """Trading use case: list trades for QRL/USDT."""
@@ -5452,90 +5536,6 @@ def order_book_from_api(payload: dict[str, Any]) -> OrderBook:
     bids = _parse_levels(payload.get("bids", []))
     asks = _parse_levels(payload.get("asks", []))
     return OrderBook(bids=bids, asks=asks)
-```
-
-## File: src/app/interfaces/http/api/tasks_routes.py
-```python
-import asyncio
-import logging
-
-from fastapi import APIRouter, HTTPException
-import httpx
-from pydantic import ValidationError
-
-from src.app.interfaces.http.schemas import AllocationResponse
-from src.app.interfaces.tasks import entrypoints
-
-router = APIRouter()
-api_router = APIRouter()
-logger = logging.getLogger(__name__)
-
-
-async def _trigger_allocation() -> AllocationResponse:
-    """Run the allocation task and normalize the response."""
-    try:
-        result = await entrypoints.run_allocation()
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Allocation task exceeded timeout")
-    except (ValidationError, httpx.HTTPError) as exc:
-        logger.exception("Allocation failed due to configuration or upstream API error")
-        raise HTTPException(status_code=502, detail=str(exc))
-    except Exception:
-        logger.exception("Unexpected allocation failure")
-        raise HTTPException(status_code=500, detail="Allocation task failed")
-    return AllocationResponse.model_validate(result)
-
-
-@router.api_route(
-    "/allocation",
-    methods=["POST", "GET"],
-    response_model=AllocationResponse,
-    tags=["tasks"],
-    name="tasks_allocation_trigger",
-)
-async def trigger_allocation() -> AllocationResponse:
-    """Endpoint for Cloud Scheduler to trigger an allocation run."""
-    return await _trigger_allocation()
-
-
-@api_router.api_route(
-    "/allocation",
-    methods=["POST", "GET"],
-    response_model=AllocationResponse,
-    tags=["tasks"],
-    name="api_tasks_allocation_trigger",
-)
-async def trigger_allocation_api() -> AllocationResponse:
-    """API-aligned alias to trigger allocation under the /api/tasks namespace."""
-    return await _trigger_allocation()
-```
-
-## File: src/app/interfaces/tasks/entrypoints.py
-```python
-"""HTTP/Scheduler entrypoints for background tasks."""
-
-import asyncio
-import os
-
-from src.app.application.system.use_cases.allocation import AllocationResult, AllocationUseCase
-from src.app.interfaces.http.dependencies import build_exchange_factory
-
-
-def _allocation_timeout_seconds() -> float:
-    """Read the scheduler task timeout from the environment."""
-    raw: str | None = os.getenv("TASK_TIMEOUT_SECONDS", "20")
-    try:
-        return float(raw)
-    except ValueError:
-        return 20.0
-
-
-async def run_allocation(timeout_seconds: float | None = None) -> AllocationResult:
-    """Trigger the allocation use case for Cloud Scheduler with a bounded runtime."""
-    exchange_factory = build_exchange_factory()
-    usecase = AllocationUseCase(exchange_factory)
-    timeout = timeout_seconds or _allocation_timeout_seconds()
-    return await asyncio.wait_for(usecase.execute(), timeout=timeout)
 ```
 
 ## File: src/app/application/system/use_cases/allocation.py
