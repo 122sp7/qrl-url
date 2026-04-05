@@ -1,56 +1,52 @@
 ---
-description: 'Python coding conventions and guidelines'
+description: 'Python coding conventions for this project (Python 3.11+, FastAPI, DDD)'
 applyTo: '**/*.py'
 ---
 
 # Python Coding Conventions
 
-## Python Instructions
+## Style & Formatting
 
-- Write clear and concise comments for each function.
-- Ensure functions have descriptive names and include type hints.
-- Provide docstrings following PEP 257 conventions.
-- Use the `typing` module for type annotations (e.g., `List[str]`, `Dict[str, int]`).
-- Break down complex functions into smaller, more manageable functions.
+- Follow **PEP 8**; max line length **100** characters (black + ruff enforced).
+- Use 4 spaces for indentation; never tabs.
+- Use type hints on **all** function signatures (parameters and return types).
+- Use `from __future__ import annotations` only when needed for forward refs.
+- Prefer `pathlib.Path` over `os.path`.
+- Use `logging` (structured JSON) instead of `print`.
 
-## General Instructions
+## Naming
 
-- Always prioritize readability and clarity.
-- For algorithm-related code, include explanations of the approach used.
-- Write code with good maintainability practices, including comments on why certain design decisions were made.
-- Handle edge cases and write clear exception handling.
-- For libraries or external dependencies, mention their usage and purpose in comments.
-- Use consistent naming conventions and follow language-specific best practices.
-- Write concise, efficient, and idiomatic code that is also easily understandable.
+- Variables, functions, modules: `snake_case`.
+- Classes: `PascalCase`.
+- Constants: `UPPER_SNAKE_CASE`.
+- Private members: prefix with `_`.
 
-## Code Style and Formatting
+## Functions & Classes
 
-- Follow the **PEP 8** style guide for Python.
-- Maintain proper indentation (use 4 spaces for each level of indentation).
-- Ensure lines do not exceed 79 characters.
-- Place function and class docstrings immediately after the `def` or `class` keyword.
-- Use blank lines to separate functions, classes, and code blocks where appropriate.
+- Keep functions small and single-purpose (≤ 30 lines as a guide).
+- Write docstrings (PEP 257) for **public** functions and classes only.
+- Avoid deeply nested blocks; use guard clauses to return early.
+- Do not add comments for obvious code; comment only the *why*.
 
-## Edge Cases and Testing
+## Async
 
-- Always include test cases for critical paths of the application.
-- Account for common edge cases like empty inputs, invalid data types, and large datasets.
-- Include comments for edge cases and the expected behavior in those cases.
-- Write unit tests for functions and document them with docstrings explaining the test cases.
+- All I/O must be `async`; never use `time.sleep()` — use `asyncio.sleep()`.
+- Use `async with` / `async for` correctly; avoid blocking calls in async context.
 
-## Example of Proper Documentation
+## Error Handling
 
-```python
-def calculate_area(radius: float) -> float:
-    """
-    Calculate the area of a circle given the radius.
-    
-    Parameters:
-    radius (float): The radius of the circle.
-    
-    Returns:
-    float: The area of the circle, calculated as π * radius^2.
-    """
-    import math
-    return math.pi * radius ** 2
-```
+- Use the **Result pattern** (`Ok`/`Err`) for use-case return values.
+- Define custom exception classes per domain; avoid bare `except`.
+- Validate at system boundaries (interfaces layer); trust domain objects internally.
+
+## DDD Layer Rules
+
+- **Domain**: pure Python, no imports from application/infrastructure/interfaces.
+- **Application**: orchestrate only; no business logic; no raw dicts as return types.
+- **Interfaces**: validate input (Pydantic), map to VO/Command, call use case, map to DTO.
+- **Infrastructure**: implement ports; never call domain services directly.
+
+## Dependencies
+
+- Import standard library first, then third-party, then local (`isort` / ruff `I`).
+- Never commit secrets; read from environment variables via `config.py`.
