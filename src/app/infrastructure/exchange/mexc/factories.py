@@ -163,7 +163,11 @@ def trades_from_public_proto(
                 trade_id=TradeId(trade_id_str),
                 order_id=OrderId(order_id_str),
                 symbol=symbol,
-                side=OrderSide("BUY") if bool(getattr(item, "isBuyerMaker", False)) else OrderSide("SELL"),
+                side=(
+                    OrderSide("BUY")
+                    if bool(getattr(item, "isBuyerMaker", False))
+                    else OrderSide("SELL")
+                ),
                 price=Decimal(str(getattr(item, "price", 0))),
                 quantity=Decimal(str(getattr(item, "quantity", 0))),
                 fee=None,
@@ -224,7 +228,11 @@ def orders_from_private_proto(
                 quantity=Quantity(Decimal(str(getattr(item, "origQty", 0)))),
                 created_at=_default_timestamp(),
                 time_in_force=None,
-                client_order_id=str(getattr(item, "clientOrderId", "")) if getattr(item, "clientOrderId", None) else None,
+                client_order_id=(
+                    str(getattr(item, "clientOrderId", ""))
+                    if getattr(item, "clientOrderId", None)
+                    else None
+                ),
                 executed_quantity=Decimal(str(getattr(item, "executedQty", 0))),
                 cumulative_quote_quantity=Decimal(str(getattr(item, "cummulativeQuoteQty", 0))),
                 updated_at=_default_timestamp(),

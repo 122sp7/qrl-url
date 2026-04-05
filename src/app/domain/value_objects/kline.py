@@ -37,4 +37,7 @@ class KLine:
         timestamp_ms: int,
     ) -> "KLine":
         ts = Timestamp(datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC))
-        return cls(open=open_price, high=high, low=low, close=close, volume=volume, interval=interval, timestamp=ts)
+        return cls(
+            open=open_price, high=high, low=low, close=close,
+            volume=volume, interval=interval, timestamp=ts,
+        )

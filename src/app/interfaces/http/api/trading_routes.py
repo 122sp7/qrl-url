@@ -18,7 +18,8 @@ router = APIRouter()
 
 @router.post("/orders")
 async def place_order(
-    request: PlaceOrderRequest, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+    request: PlaceOrderRequest,
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
     """Place spot order for QRL/USDT (subaccount)."""
     usecase = PlaceOrderUseCase(exchange_factory)

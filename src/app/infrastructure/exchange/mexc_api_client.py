@@ -27,12 +27,18 @@ class MexcApiClient:
         bid = Decimal(payload.get("bidPrice", "0"))
         ask = Decimal(payload.get("askPrice", "0"))
         last = Decimal(payload.get("lastPrice", payload.get("last", "0")))
-        ts_value = payload.get("closeTime") or payload.get("close_time") or int(datetime.now(tz=UTC).timestamp() * 1000)
+        ts_value = (
+            payload.get("closeTime")
+            or payload.get("close_time")
+            or int(datetime.now(tz=UTC).timestamp() * 1000)
+        )
         timestamp = Timestamp(datetime.fromtimestamp(int(ts_value) / 1000, tz=UTC))
         return Price(bid=bid, ask=ask, last=last, timestamp=timestamp)
 
     async def get_klines(self, pair: TradingPair, interval: str, limit: int = 100) -> list[KLine]:
-        raw_list = await self._rest_client.klines(symbol=pair.symbol, interval=interval, limit=limit)
+        raw_list = await self._rest_client.klines(
+            symbol=pair.symbol, interval=interval, limit=limit
+        )
         klines: list[KLine] = []
         for item in raw_list:
             if not isinstance(item, Iterable):

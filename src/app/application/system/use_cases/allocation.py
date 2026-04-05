@@ -100,7 +100,9 @@ class AllocationUseCase:
             top_price = _best_price(order_book, comparison.preferred_side)
             if top_price <= 0 or best_bid <= 0 or best_ask <= 0:
                 return _result_from_slippage(
-                    request_id, executed_at, SlippageAssessment(Decimal("0"), Decimal("0"), False, "No executable depth")
+                    request_id,
+                    executed_at,
+                    SlippageAssessment(Decimal("0"), Decimal("0"), False, "No executable depth"),
                 )
             slippage = self._slippage_analyzer.assess(
                 side=comparison.preferred_side,
@@ -122,10 +124,14 @@ class AllocationUseCase:
                 return _result_from_slippage(
                     request_id,
                     executed_at,
-                    SlippageAssessment(Decimal("0"), Decimal("0"), False, "Cannot place maker limit"),
+                    SlippageAssessment(
+                        Decimal("0"), Decimal("0"), False, "Cannot place maker limit"
+                    ),
                 )
             command = _build_order_command(
-                side=comparison.preferred_side, quantity=self._target_quantity, limit_price=limit_price
+                side=comparison.preferred_side,
+                quantity=self._target_quantity,
+                limit_price=limit_price,
             )
             order = await svc.place_order(
                 PlaceOrderRequest(
@@ -147,7 +153,9 @@ class AllocationUseCase:
         )
 
 
-def _normalize_balances(account: Account, mid_price: Decimal, valuation: ValuationService) -> NormalizedBalances:
+def _normalize_balances(
+    account: Account, mid_price: Decimal, valuation: ValuationService
+) -> NormalizedBalances:
     """Return normalized balances using total (free + locked) holdings."""
     qrl_total = Decimal("0")
     usdt_total = Decimal("0")
@@ -188,7 +196,9 @@ def _best_ask(book: OrderBook) -> Decimal:
     return min(asks) if asks else Decimal("0")
 
 
-def _compute_limit_price(*, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal) -> Decimal | None:
+def _compute_limit_price(
+    *, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal
+) -> Decimal | None:
     """Return a maker-style limit price that does not cross the spread."""
     if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
         return None

@@ -9,7 +9,9 @@ class GetQrlOrder:
     def __init__(self, exchange_factory: ExchangeServiceFactory):
         self._exchange_factory = exchange_factory
 
-    async def execute(self, *, order_id: str | None = None, client_order_id: str | None = None) -> dict:
+    async def execute(
+        self, *, order_id: str | None = None, client_order_id: str | None = None
+    ) -> dict:
         request = GetOrderRequest(
             symbol=Symbol("QRLUSDT"), order_id=order_id, client_order_id=client_order_id
         )

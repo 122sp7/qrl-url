@@ -9,7 +9,9 @@ router = APIRouter()
 
 
 @router.get("/api/price/{symbol}")
-async def get_price(symbol: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
+async def get_price(
+    symbol: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+):
     usecase = GetPriceUseCase(exchange_factory)
     return await usecase.execute(symbol)
 

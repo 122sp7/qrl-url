@@ -42,8 +42,12 @@ class AllocationResponse(BaseModel):
     status: str = Field(description="Execution status for the allocation task")
     executed_at: datetime = Field(description="UTC timestamp when the task executed")
     action: str = Field(description="Trade action executed (BUY, SELL, SKIP, REJECTED)")
-    order_id: str | None = Field(default=None, description="Order identifier returned by the exchange")
-    reason: str | None = Field(default=None, description="Reason when action is skipped or rejected")
+    order_id: str | None = Field(  # noqa: E501
+        default=None, description="Order identifier returned by the exchange"
+    )
+    reason: str | None = Field(  # noqa: E501
+        default=None, description="Reason when action is skipped or rejected"
+    )
     slippage_pct: Decimal | None = Field(
         default=None, description="Calculated slippage percentage for the planned order"
     )

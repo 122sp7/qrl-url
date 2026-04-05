@@ -39,7 +39,10 @@ async def qrl_kline(
     try:
         raw = await usecase.execute()
         normalized = [
-            {"timestamp": item[0], "open": item[1], "high": item[2], "low": item[3], "close": item[4], "volume": item[5]}
+            {
+                "timestamp": item[0], "open": item[1], "high": item[2],
+                "low": item[3], "close": item[4], "volume": item[5],
+            }
             for item in raw
         ]
         return normalized
@@ -61,7 +64,8 @@ async def qrl_depth(
 
 @router.post("/orders")
 async def qrl_place_order(
-    request: PlaceOrderRequest, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+    request: PlaceOrderRequest,
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
     usecase = PlaceQrlOrder(exchange_factory)
     return await usecase.execute(
@@ -83,7 +87,9 @@ async def qrl_cancel_order(
 
 
 @router.get("/orders/{order_id}")
-async def qrl_get_order(order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)):
+async def qrl_get_order(
+    order_id: str, exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory)
+):
     usecase = GetQrlOrder(exchange_factory)
     return await usecase.execute(order_id=order_id, client_order_id=None)
 
@@ -105,7 +111,9 @@ async def qrl_summary(
     trades_uc = ListTradesUseCase(exchange_factory)
     market_trades_uc = GetMarketTradesUseCase(exchange_factory)
 
-    price_result, kline_result, depth_result, balance_result, orders, trades, market_trades = await asyncio.gather(
+    (
+        price_result, kline_result, depth_result, balance_result, orders, trades, market_trades
+    ) = await asyncio.gather(
         price_uc.execute(),
         kline_uc.execute(),
         depth_uc.execute(),
@@ -116,7 +124,10 @@ async def qrl_summary(
     )
 
     normalized_klines = [
-        {"timestamp": item[0], "open": item[1], "high": item[2], "low": item[3], "close": item[4], "volume": item[5]}
+        {
+            "timestamp": item[0], "open": item[1], "high": item[2],
+            "low": item[3], "close": item[4], "volume": item[5],
+        }
         for item in kline_result
     ]
     return {
