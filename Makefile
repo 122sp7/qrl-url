@@ -8,7 +8,7 @@ fmt:
 	black api infrastructure services repositories domain src tests
 
 lint:
-	ruff check api infrastructure services repositories domain src tests
+	ruff check src/ tests/
 
 type:
 	mypy api infrastructure services repositories domain src

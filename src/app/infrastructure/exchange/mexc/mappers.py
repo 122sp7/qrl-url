@@ -75,7 +75,7 @@ def order_from_api(payload: dict[str, Any]) -> Order:
         order_type=OrderType(payload.get("type", "LIMIT")),
         status=OrderStatus(payload.get("status", "NEW")),
         price=price_vo,
-        quantity=Quantity(_to_decimal(  # noqa: E501
+        quantity=Quantity(_to_decimal(
             payload.get("origQty", payload.get("quantity", "0.00000001"))
         )),
         time_in_force=TimeInForce(payload["timeInForce"]) if payload.get("timeInForce") else None,

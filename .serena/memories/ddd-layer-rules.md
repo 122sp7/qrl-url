@@ -28,5 +28,18 @@ Interface → Application → Domain ← Infrastructure (Infrastructure implemen
 - Never return dicts or accept primitives in Use Cases
 - Boundary conversion: infra primitives → Use Case converts to VO → Interface converts to DTO
 
+## Value Object ClassVar pattern (avoid RUF012)
+Mutable class-level attributes in frozen dataclasses need ClassVar annotation:
+```python
+from typing import ClassVar
+_allowed: ClassVar[set[str]] = {"LIMIT", "MARKET"}
+```
+
+## ruff per-file-ignores for generated protobuf
+```toml
+"src/app/infrastructure/exchange/mexc/generated/**" = ["E402", "E501", "ERA001", "F401", "N999"]
+```
+See pyproject.toml. NEVER edit _pb2.py files manually.
+
 ## Full lint rules: docs/ddd/ddd-lint-rules.md
 ## Full DDD docs: docs/ddd/
