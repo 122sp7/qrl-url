@@ -96,7 +96,17 @@ class CachedMexcExchangeService(ExchangeService):
         result = await self._inner.get_kline(symbol, interval, limit)
         await self._redis.set_json(
             f"kline:{symbol.value}:{interval}",
-            result,
+            [
+                [
+                    int(k.timestamp.value.timestamp() * 1000),
+                    str(k.open),
+                    str(k.high),
+                    str(k.low),
+                    str(k.close),
+                    str(k.volume),
+                ]
+                for k in result
+            ],
             self._TTL_KLINE,
         )
         return result
