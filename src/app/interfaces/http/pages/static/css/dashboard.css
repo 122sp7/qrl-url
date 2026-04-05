@@ -94,39 +94,20 @@ body {
   color: var(--muted);
 }
 
-.hero-grid,
-.content-grid {
+.summary-grid,
+.workspace-grid {
   display: grid;
   gap: 20px;
   align-items: start;
 }
 
-.hero-grid {
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(300px, 360px);
+.summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 20px;
 }
 
-.content-grid {
-  grid-template-columns: minmax(320px, 1.1fr) minmax(300px, 0.9fr) minmax(280px, 0.85fr);
-  grid-template-areas:
-    "depth trades balance"
-    "orders orders orders";
-}
-
-.depth-card {
-  grid-area: depth;
-}
-
-.trades-card {
-  grid-area: trades;
-}
-
-.balance-card {
-  grid-area: balance;
-}
-
-.orders-card {
-  grid-area: orders;
+.workspace-grid {
+  grid-template-columns: minmax(0, 1.5fr) minmax(360px, 420px);
 }
 
 .card {
@@ -147,7 +128,7 @@ body {
 }
 
 .card h2 {
-  font-size: 1.85rem;
+  font-size: 1.45rem;
   line-height: 1.1;
 }
 
@@ -209,12 +190,14 @@ canvas {
 }
 
 .market-card,
-.order-card {
-  min-height: 100%;
+.balance-card,
+.compact-card,
+.depth-card {
+  height: 100%;
 }
 
 .chart-card {
-  min-height: 540px;
+  min-height: 620px;
 }
 
 .depth-list,
@@ -223,7 +206,7 @@ canvas {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 320px;
+  max-height: 300px;
   overflow-y: auto;
   border: 1px solid rgba(78, 57, 34, 0.08);
   border-radius: var(--radius-md);
@@ -289,7 +272,7 @@ canvas {
 }
 
 .trades-card .trades-list {
-  max-height: 360px;
+  max-height: 260px;
 }
 
 .trades-list li {
@@ -297,7 +280,7 @@ canvas {
 }
 
 .orders-card .orders-list {
-  max-height: none;
+  max-height: 260px;
 }
 
 .depth-list li {
@@ -334,6 +317,44 @@ canvas {
   background: rgba(159, 100, 49, 0.08);
 }
 
+.depth-trade-layout {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.order-panel {
+  padding: 16px;
+  border: 1px solid rgba(159, 100, 49, 0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #fff9f1 0%, #fbf3e6 100%);
+}
+
+.order-panel-head {
+  margin-bottom: 12px;
+}
+
+.order-panel-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.order-panel-head p {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.compact-order-form {
+  gap: 10px;
+}
+
+.order-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .order-form {
   display: flex;
   flex-direction: column;
@@ -363,8 +384,8 @@ form label {
 form input,
 form select {
   width: 100%;
-  min-height: 48px;
-  padding: 10px 12px;
+  min-height: 42px;
+  padding: 8px 10px;
   border: 1px solid rgba(78, 57, 34, 0.18);
   border-radius: var(--radius-sm);
   background: #fffdfa;
@@ -394,7 +415,7 @@ button:hover {
 }
 
 .primary-action {
-  min-height: 50px;
+  min-height: 42px;
 }
 
 .side-toggle {
@@ -419,24 +440,16 @@ button:hover {
 .order-result {
   min-height: 22px;
   color: var(--text);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 1320px) {
-  .hero-grid {
-    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  }
-
-  .order-card {
-    grid-column: 1 / -1;
-  }
-
-  .content-grid {
+  .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "depth trades"
-      "balance balance"
-      "orders orders";
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -446,18 +459,11 @@ button:hover {
     padding-top: 18px;
   }
 
-  .hero-grid,
-  .content-grid,
-  .book-grid {
+  .summary-grid,
+  .workspace-grid,
+  .book-grid,
+  .order-inline-grid {
     grid-template-columns: 1fr;
-  }
-
-  .content-grid {
-    grid-template-areas:
-      "depth"
-      "trades"
-      "balance"
-      "orders";
   }
 
   .card {
@@ -477,5 +483,9 @@ button:hover {
   .orders-list .orders-header,
   .trades-list li {
     font-size: 0.86rem;
+  }
+
+  .chart-card {
+    min-height: auto;
   }
 }
