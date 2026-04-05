@@ -125,70 +125,6 @@ from src.app.domain.aggregates.trading_session import TradingSession
 __all__ = ["AccountState", "MarketSnapshot", "TradingSession"]
 ```
 
-## File: src/app/domain/aggregates/account_state.py
-```python
-from dataclasses import dataclass, field
-
-from src.app.domain.entities.account import Account
-from src.app.domain.entities.order import Order
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass
-class AccountState:
-    """Aggregate for account balances and outstanding orders."""
-
-    symbol: Symbol
-    account: Account
-    open_orders: list[Order] = field(default_factory=list)
-    updated_at: Timestamp | None = None
-```
-
-## File: src/app/domain/aggregates/market_snapshot.py
-```python
-from dataclasses import dataclass, field
-
-from src.app.domain.entities.order_book_level import OrderBookLevel
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass
-class MarketSnapshot:
-    """Combined market view for depth, trades, and ticker."""
-
-    symbol: Symbol
-    bids: list[OrderBookLevel] = field(default_factory=list)
-    asks: list[OrderBookLevel] = field(default_factory=list)
-    trades: list[Trade] = field(default_factory=list)
-    ticker: Ticker | None = None
-    updated_at: Timestamp | None = None
-```
-
-## File: src/app/domain/aggregates/trading_session.py
-```python
-from dataclasses import dataclass, field
-
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.trade import Trade
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass
-class TradingSession:
-    """Session-level aggregate for managing open and historical activity."""
-
-    symbol: Symbol
-    open_orders: list[Order] = field(default_factory=list)
-    trades: list[Trade] = field(default_factory=list)
-    started_at: Timestamp | None = None
-    last_activity_at: Timestamp | None = None
-```
-
 ## File: src/app/domain/entities/__init__.py
 ```python
 """Domain entities for QRL/USDT spot trading."""
@@ -274,51 +210,6 @@ class BalanceEvent:
     asset: str
     free: Decimal
     locked: Decimal
-    timestamp: int
-```
-
-## File: src/app/domain/events/order_event.py
-```python
-from dataclasses import dataclass
-
-from app.domain.value_objects.order_id import OrderId
-from app.domain.value_objects.order_status import OrderStatus
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-
-
-@dataclass(frozen=True)
-class OrderEvent:
-    """Private order update event."""
-
-    order_id: OrderId
-    symbol: Symbol
-    price: Price
-    quantity: Quantity
-    status: OrderStatus
-    timestamp: int
-```
-
-## File: src/app/domain/events/trade_event.py
-```python
-from dataclasses import dataclass
-
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.domain.value_objects.trade_id import TradeId
-
-
-@dataclass(frozen=True)
-class TradeEvent:
-    """Public trade tick."""
-
-    trade_id: TradeId
-    symbol: Symbol
-    price: Price
-    quantity: Quantity
-    is_buyer_maker: bool
     timestamp: int
 ```
 
@@ -527,88 +418,6 @@ __all__ = [
     "order_proto_to_domain",
     "trade_proto_to_domain",
 ]
-```
-
-## File: src/app/infrastructure/exchange/mexc/adapters/balance_mapper.py
-```python
-from decimal import Decimal
-
-from app.domain.events.balance_event import BalanceEvent
-from app.infrastructure.exchange.mexc.generated import PrivateAccountV3Api_pb2
-
-
-def balance_proto_to_domain(
-    proto: PrivateAccountV3Api_pb2.PrivateAccountV3ApiBalance,
-) -> BalanceEvent:
-    return BalanceEvent(
-        asset=proto.asset,
-        free=Decimal(proto.free),
-        locked=Decimal(proto.locked),
-        timestamp=proto.timestamp,
-    )
-```
-
-## File: src/app/infrastructure/exchange/mexc/adapters/depth_mapper.py
-```python
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import PublicAggreDepthsV3Api_pb2
-
-
-def depth_proto_to_domain(
-    symbol: Symbol, proto: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api
-) -> MarketDepthEvent:
-    bids = [
-        (Price(float(item.price)), Quantity(float(item.quantity))) for item in proto.bids
-    ]
-    asks = [
-        (Price(float(item.price)), Quantity(float(item.quantity))) for item in proto.asks
-    ]
-
-    return MarketDepthEvent(
-        symbol=symbol,
-        bids=bids,
-        asks=asks,
-        event_type=proto.eventType if hasattr(proto, "eventType") else None,
-        from_version=proto.fromVersion if hasattr(proto, "fromVersion") else None,
-        to_version=proto.toVersion if hasattr(proto, "toVersion") else None,
-    )
-```
-
-## File: src/app/infrastructure/exchange/mexc/adapters/order_mapper.py
-```python
-from app.domain.events.order_event import OrderEvent
-from app.domain.value_objects.order_id import OrderId
-from app.domain.value_objects.order_status import OrderStatus
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import PrivateOrdersV3Api_pb2
-
-
-def order_proto_to_domain(proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api) -> OrderEvent:
-    # MEXC push includes status as int; default to NEW when unmapped
-    status_value = "NEW"
-    try:
-        status_value = str(proto.status).upper()
-    except Exception:
-        status_value = "NEW"
-
-    try:
-        status = OrderStatus(status_value)
-    except ValueError:
-        status = OrderStatus("NEW")
-
-    return OrderEvent(
-        order_id=OrderId(proto.id),
-        symbol=Symbol("QRLUSDT"),
-        price=Price(float(proto.price)),
-        quantity=Quantity(float(proto.quantity)),
-        status=status,
-        timestamp=proto.createTime,
-    )
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/generated/__init__.py
@@ -1281,36 +1090,6 @@ class GetMarketTradesUseCase:
             return await exchange.get_market_trades(Symbol("QRLUSDT"), limit=payload.limit)
 ```
 
-## File: src/app/application/ports/exchange_gateway.py
-```python
-from collections.abc import AsyncIterator
-from typing import Protocol
-
-from app.domain.events.balance_event import BalanceEvent
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.order_event import OrderEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.symbol import Symbol
-
-
-class ExchangeGateway(Protocol):
-    """Application port for streaming market/account data."""
-
-    async def subscribe_market_depth(
-        self, symbol: Symbol
-    ) -> AsyncIterator[MarketDepthEvent]:
-        ...
-
-    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
-        ...
-
-    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
-        ...
-
-    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
-        ...
-```
-
 ## File: src/app/application/system/use_cases/get_server_time.py
 ```python
 """
@@ -1434,34 +1213,6 @@ def map_rest_trade_dto_to_domain(dto: dict) -> Trade:
     )
 ```
 
-## File: src/app/application/trading/qrl/guards/qrl_balance_guard.py
-```python
-from src.app.domain.services.qrl_guards import ensure_sufficient_balance
-
-__all__ = ["ensure_sufficient_balance"]
-```
-
-## File: src/app/application/trading/qrl/guards/qrl_duplicate_guard.py
-```python
-from src.app.domain.services.qrl_guards import prevent_duplicate
-
-__all__ = ["prevent_duplicate"]
-```
-
-## File: src/app/application/trading/qrl/guards/qrl_price_guard.py
-```python
-from src.app.domain.services.qrl_guards import ensure_price_range
-
-__all__ = ["ensure_price_range"]
-```
-
-## File: src/app/application/trading/qrl/guards/qrl_rate_limit_guard.py
-```python
-from src.app.domain.services.qrl_guards import enforce_rate_limit
-
-__all__ = ["enforce_rate_limit"]
-```
-
 ## File: src/app/application/trading/use_cases/cancel_order.py
 ```python
 """Trading use case: cancel existing order for QRL/USDT."""
@@ -1581,6 +1332,183 @@ class ListOrdersUseCase:
         return [_serialize_order(order) for order in orders]
 ```
 
+## File: src/app/domain/aggregates/account_state.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.order import Order
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+_OPEN_STATUSES = frozenset({"NEW", "PARTIALLY_FILLED"})
+
+
+@dataclass
+class AccountState:
+    """Aggregate for account balances and outstanding orders."""
+
+    symbol: Symbol
+    account: Account
+    open_orders: list[Order] = field(default_factory=list)
+    updated_at: Timestamp | None = None
+    _domain_events: list = field(default_factory=list, init=False, repr=False, compare=False)
+
+    def record_order(self, order: Order) -> None:
+        """Track an open order for this account state."""
+        if order.status.value not in _OPEN_STATUSES:
+            return
+        if any(o.order_id == order.order_id for o in self.open_orders):
+            return
+        self.open_orders.append(order)
+
+    def refresh(self, account: Account) -> None:
+        """Replace the underlying account snapshot."""
+        from datetime import UTC, datetime
+
+        self.account = account
+        self.updated_at = Timestamp(datetime.now(UTC))
+
+    def pop_events(self) -> list:
+        """Return and clear all pending domain events."""
+        events, self._domain_events = self._domain_events, []
+        return events
+```
+
+## File: src/app/domain/aggregates/market_snapshot.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from src.app.domain.entities.order_book_level import OrderBookLevel
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+@dataclass
+class MarketSnapshot:
+    """Combined market view for depth, trades, and ticker."""
+
+    symbol: Symbol
+    bids: list[OrderBookLevel] = field(default_factory=list)
+    asks: list[OrderBookLevel] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
+    ticker: Ticker | None = None
+    updated_at: Timestamp | None = None
+    _domain_events: list = field(default_factory=list, init=False, repr=False, compare=False)
+
+    def update_depth(
+        self,
+        bids: list[OrderBookLevel],
+        asks: list[OrderBookLevel],
+    ) -> None:
+        """Replace depth levels and mark snapshot as updated."""
+        from datetime import UTC, datetime
+
+        self.bids = bids
+        self.asks = asks
+        self.updated_at = Timestamp(datetime.now(UTC))
+
+    def update_ticker(self, ticker: Ticker) -> None:
+        """Replace the ticker snapshot."""
+        from datetime import UTC, datetime
+
+        self.ticker = ticker
+        self.updated_at = Timestamp(datetime.now(UTC))
+
+    def add_trade(self, trade: Trade) -> None:
+        """Append a new public trade tick."""
+        self.trades.append(trade)
+
+    def pop_events(self) -> list:
+        """Return and clear all pending domain events."""
+        events, self._domain_events = self._domain_events, []
+        return events
+```
+
+## File: src/app/domain/aggregates/trading_session.py
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from decimal import Decimal
+
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.trade import Trade
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.timestamp import Timestamp
+
+
+_OPEN_STATUSES = frozenset({"NEW", "PARTIALLY_FILLED"})
+
+
+@dataclass
+class TradingSession:
+    """Session-level aggregate for managing open and historical activity."""
+
+    symbol: Symbol
+    open_orders: list[Order] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
+    started_at: Timestamp | None = None
+    last_activity_at: Timestamp | None = None
+    _domain_events: list = field(default_factory=list, init=False, repr=False, compare=False)
+
+    def add_order(self, order: Order) -> None:
+        """Register an open order, enforcing symbol and status invariants."""
+        if order.symbol != self.symbol:
+            raise ValueError(
+                f"Order symbol {order.symbol} does not match session {self.symbol}"
+            )
+        if order.status.value not in _OPEN_STATUSES:
+            raise ValueError(
+                f"Only NEW/PARTIALLY_FILLED orders belong in TradingSession; got {order.status.value}"
+            )
+        if any(o.order_id == order.order_id for o in self.open_orders):
+            raise ValueError(f"Duplicate order_id {order.order_id.value} in TradingSession")
+        self.open_orders.append(order)
+        price_value = order.price.value if order.price else Decimal("0")
+        self._domain_events.append(
+            OrderEvent(
+                order_id=order.order_id,
+                symbol=order.symbol,
+                price=Price.from_single(price_value),
+                quantity=order.quantity,
+                status=order.status,
+                timestamp=int(order.created_at.value.timestamp() * 1000),
+            )
+        )
+
+    def record_trade(self, trade: Trade) -> None:
+        """Record a completed trade and update activity timestamp."""
+        from datetime import UTC, datetime
+
+        self.trades.append(trade)
+        self.last_activity_at = Timestamp(datetime.now(UTC))
+
+    def close_order(self, order_id_value: str, new_status: OrderStatus) -> None:
+        """Transition an open order to a terminal status and remove it from the open list."""
+        for order in self.open_orders:
+            if order.order_id.value == order_id_value:
+                order.status = new_status
+                self.open_orders.remove(order)
+                return
+        raise ValueError(f"Order {order_id_value} not found in open orders")
+
+    def pop_events(self) -> list:
+        """Return and clear all pending domain events."""
+        events, self._domain_events = self._domain_events, []
+        return events
+```
+
 ## File: src/app/domain/entities/account.py
 ```python
 from dataclasses import dataclass
@@ -1613,36 +1541,98 @@ __all__ = [
 ]
 ```
 
-## File: src/app/domain/events/market_depth_event.py
+## File: src/app/domain/events/order_event.py
 ```python
 from dataclasses import dataclass
 
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
 
 
 @dataclass(frozen=True)
-class MarketDepthEvent:
-    """
-    Order book depth snapshot/update at a point in time.
+class OrderEvent:
+    """Private order update event."""
 
-    Notes:
-        - Bids/asks are sorted by price on the exchange side.
-        - Versions allow consumers to detect gaps and request replay.
-    """
-
+    order_id: OrderId
     symbol: Symbol
-    bids: list[tuple[Price, Quantity]]
-    asks: list[tuple[Price, Quantity]]
-    event_type: str | None
-    from_version: str | None
-    to_version: str | None
+    price: Price
+    quantity: Quantity
+    status: OrderStatus
+    timestamp: int
+```
+
+## File: src/app/domain/events/trade_event.py
+```python
+from dataclasses import dataclass
+
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.trade_id import TradeId
+
+
+@dataclass(frozen=True)
+class TradeEvent:
+    """Public trade tick."""
+
+    trade_id: TradeId
+    symbol: Symbol
+    price: Price
+    quantity: Quantity
+    is_buyer_maker: bool
+    timestamp: int
 ```
 
 ## File: src/app/domain/services/__init__.py
 ```python
 """Domain services for allocation and depth analysis."""
+```
+
+## File: src/app/domain/services/limit_price_calculator.py
+```python
+from decimal import Decimal
+
+from src.app.domain.value_objects.order_book import OrderBook
+from src.app.domain.value_objects.side import Side
+
+
+class LimitPriceCalculator:
+    """Determine a maker-style limit price that does not cross the spread."""
+
+    def __init__(self, buffer_pct: Decimal = Decimal("0.001")):
+        self._buffer_pct = buffer_pct
+
+    def compute(self, side: Side, order_book: OrderBook) -> Decimal | None:
+        best_bid = self._best_bid(order_book)
+        best_ask = self._best_ask(order_book)
+        if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
+            return None
+        if side.value == "BUY":
+            candidate = best_bid * (Decimal("1") - self._buffer_pct)
+            return candidate if candidate < best_ask else None
+        candidate = best_ask * (Decimal("1") + self._buffer_pct)
+        return candidate if candidate > best_bid else None
+
+    @staticmethod
+    def _best_bid(book: OrderBook) -> Decimal:
+        bids = [level.price for level in book.bids]
+        return max(bids) if bids else Decimal("0")
+
+    @staticmethod
+    def _best_ask(book: OrderBook) -> Decimal:
+        asks = [level.price for level in book.asks]
+        return min(asks) if asks else Decimal("0")
+
+    def best_price(self, side: Side, order_book: OrderBook) -> Decimal:
+        """Return the best available price for the given side (min ask for BUY, max bid for SELL)."""
+        if side.value == "BUY":
+            prices = [level.price for level in order_book.asks]
+            return min(prices) if prices else Decimal("0")
+        prices = [level.price for level in order_book.bids]
+        return max(prices) if prices else Decimal("0")
 ```
 
 ## File: src/app/domain/services/qrl_guards.py
@@ -2137,84 +2127,85 @@ class Timestamp:
             object.__setattr__(self, "value", self.value.replace(tzinfo=UTC))
 ```
 
-## File: src/app/infrastructure/exchange/mexc/adapters/market_event_adapter.py
+## File: src/app/infrastructure/exchange/mexc/adapters/balance_mapper.py
 ```python
-from collections.abc import AsyncIterator
+from decimal import Decimal
 
-from app.application.ports.exchange_gateway import ExchangeGateway
-from app.domain.events.balance_event import BalanceEvent
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.order_event import OrderEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import (
-    PrivateAccountV3Api_pb2,
-    PrivateOrdersV3Api_pb2,
-    PublicAggreDepthsV3Api_pb2,
-    PublicDealsV3Api_pb2,
-)
-from app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
-
-from .balance_mapper import balance_proto_to_domain
-from .depth_mapper import depth_proto_to_domain
-from .order_mapper import order_proto_to_domain
-from .trade_mapper import trade_proto_to_domain
+from src.app.domain.events.balance_event import BalanceEvent
+from src.app.infrastructure.exchange.mexc.generated import PrivateAccountV3Api_pb2
 
 
-class MexcExchangeGateway(ExchangeGateway):
-    """Infrastructure adapter that translates MEXC WS protobuf into domain events."""
-
-    def __init__(self, ws_client: MexcWebSocketClient):
-        self._ws = ws_client
-
-    async def subscribe_market_depth(
-        self, symbol: Symbol
-    ) -> AsyncIterator[MarketDepthEvent]:
-        async for proto in self._ws.subscribe("depth", symbol.value):
-            if isinstance(proto, PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api):
-                yield depth_proto_to_domain(symbol, proto)
-
-    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
-        async for proto in self._ws.subscribe("deals", symbol.value):
-            if isinstance(proto, PublicDealsV3Api_pb2.PublicDealsV3Api):
-                for item in proto.deals:
-                    yield trade_proto_to_domain(symbol, item)
-
-    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
-        async for proto in self._ws.subscribe("orders"):
-            if isinstance(proto, PrivateOrdersV3Api_pb2.PrivateOrdersV3Api):
-                yield order_proto_to_domain(proto)
-
-    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
-        async for proto in self._ws.subscribe("balances"):
-            if isinstance(proto, PrivateAccountV3Api_pb2.PrivateAccountV3Api):
-                yield balance_proto_to_domain(proto)
+def balance_proto_to_domain(
+    proto: PrivateAccountV3Api_pb2.PrivateAccountV3ApiBalance,
+) -> BalanceEvent:
+    return BalanceEvent(
+        asset=proto.asset,
+        free=Decimal(proto.free),
+        locked=Decimal(proto.locked),
+        timestamp=proto.timestamp,
+    )
 ```
 
-## File: src/app/infrastructure/exchange/mexc/adapters/trade_mapper.py
+## File: src/app/infrastructure/exchange/mexc/adapters/depth_mapper.py
 ```python
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.domain.value_objects.trade_id import TradeId
-from app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
-
-_MEXC_TRADE_TYPE_SELL = 2
+from src.app.domain.events.market_depth_event import MarketDepthEvent
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import PublicAggreDepthsV3Api_pb2
 
 
-def trade_proto_to_domain(
-    symbol: Symbol, proto: PublicDealsV3Api_pb2.PublicDealsV3ApiItem
-) -> TradeEvent:
-    # tradeType: 1=buy, 2=sell in MEXC WS push; treat 2 as maker sell
-    is_buyer_maker = proto.tradeType == _MEXC_TRADE_TYPE_SELL
-    return TradeEvent(
-        trade_id=TradeId(str(proto.time)),
+def depth_proto_to_domain(
+    symbol: Symbol, proto: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api
+) -> MarketDepthEvent:
+    bids = [
+        (Price(float(item.price)), Quantity(float(item.quantity))) for item in proto.bids
+    ]
+    asks = [
+        (Price(float(item.price)), Quantity(float(item.quantity))) for item in proto.asks
+    ]
+
+    return MarketDepthEvent(
         symbol=symbol,
+        bids=bids,
+        asks=asks,
+        event_type=proto.eventType if hasattr(proto, "eventType") else None,
+        from_version=proto.fromVersion if hasattr(proto, "fromVersion") else None,
+        to_version=proto.toVersion if hasattr(proto, "toVersion") else None,
+    )
+```
+
+## File: src/app/infrastructure/exchange/mexc/adapters/order_mapper.py
+```python
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import PrivateOrdersV3Api_pb2
+
+
+def order_proto_to_domain(proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api) -> OrderEvent:
+    # MEXC push includes status as int; default to NEW when unmapped
+    status_value = "NEW"
+    try:
+        status_value = str(proto.status).upper()
+    except Exception:
+        status_value = "NEW"
+
+    try:
+        status = OrderStatus(status_value)
+    except ValueError:
+        status = OrderStatus("NEW")
+
+    return OrderEvent(
+        order_id=OrderId(proto.id),
+        symbol=Symbol("QRLUSDT"),
         price=Price(float(proto.price)),
         quantity=Quantity(float(proto.quantity)),
-        is_buyer_maker=is_buyer_maker,
-        timestamp=proto.time,
+        status=status,
+        timestamp=proto.createTime,
     )
 ```
 
@@ -3510,6 +3501,36 @@ class GetTickerUseCase:
             return await exchange.get_ticker_24h(Symbol("QRLUSDT"))
 ```
 
+## File: src/app/application/ports/exchange_gateway.py
+```python
+from collections.abc import AsyncIterator
+from typing import Protocol
+
+from src.app.domain.events.balance_event import BalanceEvent
+from src.app.domain.events.market_depth_event import MarketDepthEvent
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.events.trade_event import TradeEvent
+from src.app.domain.value_objects.symbol import Symbol
+
+
+class ExchangeGateway(Protocol):
+    """Application port for streaming market/account data."""
+
+    async def subscribe_market_depth(
+        self, symbol: Symbol
+    ) -> AsyncIterator[MarketDepthEvent]:
+        ...
+
+    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
+        ...
+
+    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
+        ...
+
+    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
+        ...
+```
+
 ## File: src/app/application/ports/exchange_service.py
 ```python
 from collections.abc import Callable
@@ -3669,41 +3690,6 @@ class GetKlineUseCase:
         return [_serialize_kline(k) for k in klines]
 ```
 
-## File: src/app/domain/entities/order.py
-```python
-from dataclasses import dataclass
-from decimal import Decimal
-
-from src.app.domain.value_objects.order_id import OrderId
-from src.app.domain.value_objects.order_status import OrderStatus
-from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.qrl_price import QrlPrice
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.time_in_force import TimeInForce
-from src.app.domain.value_objects.timestamp import Timestamp
-
-
-@dataclass
-class Order:
-    """Order entity limited to QRL/USDT spot."""
-
-    order_id: OrderId
-    symbol: Symbol
-    side: Side
-    order_type: OrderType
-    status: OrderStatus
-    price: QrlPrice | None
-    quantity: Quantity
-    created_at: Timestamp
-    time_in_force: TimeInForce | None = None
-    client_order_id: str | None = None
-    executed_quantity: Decimal | None = None
-    cumulative_quote_quantity: Decimal | None = None
-    updated_at: Timestamp | None = None
-```
-
 ## File: src/app/domain/entities/trade.py
 ```python
 from dataclasses import dataclass
@@ -3733,69 +3719,31 @@ class Trade:
     timestamp: Timestamp
 ```
 
-## File: src/app/domain/factories/aggregates.py
+## File: src/app/domain/events/market_depth_event.py
 ```python
-from __future__ import annotations
+from dataclasses import dataclass
 
-from collections.abc import Iterable
-from datetime import UTC, datetime
-
-from src.app.domain.aggregates.account_state import AccountState
-from src.app.domain.aggregates.market_snapshot import MarketSnapshot
-from src.app.domain.aggregates.trading_session import TradingSession
-from src.app.domain.entities.account import Account
-from src.app.domain.entities.order import Order
-from src.app.domain.entities.order_book_level import OrderBookLevel
-from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.ticker import Ticker
-from src.app.domain.value_objects.timestamp import Timestamp
 
 
-def _ts_now() -> Timestamp:
-    return Timestamp(datetime.now(UTC))
+@dataclass(frozen=True)
+class MarketDepthEvent:
+    """
+    Order book depth snapshot/update at a point in time.
 
+    Notes:
+        - Bids/asks are sorted by price on the exchange side.
+        - Versions allow consumers to detect gaps and request replay.
+    """
 
-def build_account_state(
-    *, symbol: Symbol, account: Account, open_orders: Iterable[Order] = ()
-) -> AccountState:
-    return AccountState(
-        symbol=symbol,
-        account=account,
-        open_orders=list(open_orders),
-        updated_at=_ts_now(),
-    )
-
-
-def build_trading_session(
-    *, symbol: Symbol, orders: Iterable[Order] = (), trades: Iterable[Trade] = ()
-) -> TradingSession:
-    now = _ts_now()
-    return TradingSession(
-        symbol=symbol,
-        open_orders=list(orders),
-        trades=list(trades),
-        started_at=now,
-        last_activity_at=now,
-    )
-
-
-def build_market_snapshot(
-    *,
-    symbol: Symbol,
-    bids: Iterable[OrderBookLevel] = (),
-    asks: Iterable[OrderBookLevel] = (),
-    trades: Iterable[Trade] = (),
-    ticker: Ticker | None = None,
-) -> MarketSnapshot:
-    return MarketSnapshot(
-        symbol=symbol,
-        bids=list(bids),
-        asks=list(asks),
-        trades=list(trades),
-        ticker=ticker,
-        updated_at=_ts_now(),
-    )
+    symbol: Symbol
+    bids: list[tuple[Price, Quantity]]
+    asks: list[tuple[Price, Quantity]]
+    event_type: str | None
+    from_version: str | None
+    to_version: str | None
 ```
 
 ## File: src/app/domain/services/balance_comparison_rule.py
@@ -4078,6 +4026,87 @@ class MexcApiClient:
             volume = Decimal(item[5])
             klines.append(KLine.from_raw(open_price, high, low, close, volume, interval, open_time))
         return klines
+```
+
+## File: src/app/infrastructure/exchange/mexc/adapters/market_event_adapter.py
+```python
+from collections.abc import AsyncIterator
+
+from src.app.application.ports.exchange_gateway import ExchangeGateway
+from src.app.domain.events.balance_event import BalanceEvent
+from src.app.domain.events.market_depth_event import MarketDepthEvent
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.events.trade_event import TradeEvent
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import (
+    PrivateAccountV3Api_pb2,
+    PrivateOrdersV3Api_pb2,
+    PublicAggreDepthsV3Api_pb2,
+    PublicDealsV3Api_pb2,
+)
+from src.app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
+
+from .balance_mapper import balance_proto_to_domain
+from .depth_mapper import depth_proto_to_domain
+from .order_mapper import order_proto_to_domain
+from .trade_mapper import trade_proto_to_domain
+
+
+class MexcExchangeGateway(ExchangeGateway):
+    """Infrastructure adapter that translates MEXC WS protobuf into domain events."""
+
+    def __init__(self, ws_client: MexcWebSocketClient):
+        self._ws = ws_client
+
+    async def subscribe_market_depth(
+        self, symbol: Symbol
+    ) -> AsyncIterator[MarketDepthEvent]:
+        async for proto in self._ws.subscribe("depth", symbol.value):
+            if isinstance(proto, PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api):
+                yield depth_proto_to_domain(symbol, proto)
+
+    async def subscribe_trades(self, symbol: Symbol) -> AsyncIterator[TradeEvent]:
+        async for proto in self._ws.subscribe("deals", symbol.value):
+            if isinstance(proto, PublicDealsV3Api_pb2.PublicDealsV3Api):
+                for item in proto.deals:
+                    yield trade_proto_to_domain(symbol, item)
+
+    async def subscribe_orders(self) -> AsyncIterator[OrderEvent]:
+        async for proto in self._ws.subscribe("orders"):
+            if isinstance(proto, PrivateOrdersV3Api_pb2.PrivateOrdersV3Api):
+                yield order_proto_to_domain(proto)
+
+    async def subscribe_balances(self) -> AsyncIterator[BalanceEvent]:
+        async for proto in self._ws.subscribe("balances"):
+            if isinstance(proto, PrivateAccountV3Api_pb2.PrivateAccountV3Api):
+                yield balance_proto_to_domain(proto)
+```
+
+## File: src/app/infrastructure/exchange/mexc/adapters/trade_mapper.py
+```python
+from src.app.domain.events.trade_event import TradeEvent
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.trade_id import TradeId
+from src.app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
+
+_MEXC_TRADE_TYPE_SELL = 2
+
+
+def trade_proto_to_domain(
+    symbol: Symbol, proto: PublicDealsV3Api_pb2.PublicDealsV3ApiItem
+) -> TradeEvent:
+    # tradeType: 1=buy, 2=sell in MEXC WS push; treat 2 as maker sell
+    is_buyer_maker = proto.tradeType == _MEXC_TRADE_TYPE_SELL
+    return TradeEvent(
+        trade_id=TradeId(str(proto.time)),
+        symbol=symbol,
+        price=Price(float(proto.price)),
+        quantity=Quantity(float(proto.quantity)),
+        is_buyer_maker=is_buyer_maker,
+        timestamp=proto.time,
+    )
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/rest_client.py
@@ -4720,59 +4749,6 @@ async def trigger_allocation_api() -> AllocationResponse:
 </html>
 ```
 
-## File: src/app/application/trading/qrl/place_qrl_order.py
-```python
-from decimal import Decimal
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory, PlaceOrderRequest
-from src.app.application.trading.use_cases.place_order import _serialize_order
-from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.price import Price
-from src.app.domain.value_objects.qrl_price import QrlPrice
-from src.app.domain.value_objects.qrl_quantity import QrlQuantity
-from src.app.domain.value_objects.quantity import Quantity
-from src.app.domain.value_objects.side import Side
-from src.app.domain.value_objects.symbol import Symbol
-from src.app.domain.value_objects.time_in_force import TimeInForce
-
-
-class PlaceQrlOrder:
-    """Place QRL/USDT order with fixed symbol and validated VOs."""
-
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
-
-    async def execute(  # noqa: PLR0913
-        self,
-        *,
-        side: str,
-        order_type: str,
-        price: Decimal | str | float | QrlPrice | None,
-        quantity: Decimal | str | int | float | QrlQuantity,
-        time_in_force: str | None = "GTC",
-        client_order_id: str | None = None,
-    ) -> dict:
-        price_vo = None
-        if price is not None:
-            normalized_price = price if isinstance(price, QrlPrice) else QrlPrice(price)
-            price_vo = Price.from_single(normalized_price.value)
-
-        normalized_qty = quantity if isinstance(quantity, QrlQuantity) else QrlQuantity(quantity)
-        quantity_vo = Quantity(normalized_qty.value)
-        request = PlaceOrderRequest(
-            symbol=Symbol("QRLUSDT"),
-            side=Side(side),
-            order_type=OrderType(order_type),
-            price=price_vo,
-            quantity=quantity_vo,
-            time_in_force=TimeInForce(time_in_force) if time_in_force else None,
-            client_order_id=client_order_id,
-        )
-        async with self._exchange_factory() as exchange:
-            order = await exchange.place_order(request)
-        return _serialize_order(order)
-```
-
 ## File: src/app/application/trading/use_cases/list_trades.py
 ```python
 """Trading use case: list trades for QRL/USDT."""
@@ -4808,76 +4784,103 @@ class ListTradesUseCase:
         return [_serialize_trade(trade) for trade in trades]
 ```
 
-## File: src/app/application/trading/use_cases/place_order.py
+## File: src/app/domain/entities/order.py
 ```python
-"""Trading use case: place order for QRL/USDT."""
-
 from dataclasses import dataclass
 from decimal import Decimal
 
-from src.app.application.ports.exchange_service import (
-    ExchangeServiceFactory,
-    PlaceOrderRequest,
-)
-from src.app.application.trading.dtos import OrderDTO
-from src.app.domain.entities.order import Order
+from src.app.domain.value_objects.client_order_id import ClientOrderId
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
 from src.app.domain.value_objects.order_type import OrderType
-from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.qrl_price import QrlPrice
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.domain.value_objects.timestamp import Timestamp
 
 
-def _serialize_order(order: Order) -> dict:
-    dto = OrderDTO(
-        order_id=order.order_id.value,
-        symbol=order.symbol.value,
-        side=order.side.value,
-        type=order.order_type.value,
-        status=order.status.value,
-        price=str(order.price.value) if order.price else None,
-        quantity=str(order.quantity.value),
-        executed_quantity=str(order.executed_quantity) if order.executed_quantity else None,
-        cumulative_quote_quantity=str(order.cumulative_quote_quantity)
-        if order.cumulative_quote_quantity
-        else None,
-        client_order_id=order.client_order_id,
-        created_at=order.created_at.value.isoformat(),
-        updated_at=order.updated_at.value.isoformat() if order.updated_at else None,
-        time_in_force=order.time_in_force.value if order.time_in_force else None,
-    )
-    return dto.to_dict()
+@dataclass
+class Order:
+    """Order entity limited to QRL/USDT spot."""
+
+    order_id: OrderId
+    symbol: Symbol
+    side: Side
+    order_type: OrderType
+    status: OrderStatus
+    price: QrlPrice | None
+    quantity: Quantity
+    created_at: Timestamp
+    time_in_force: TimeInForce | None = None
+    client_order_id: ClientOrderId | None = None
+    executed_quantity: Decimal | None = None
+    cumulative_quote_quantity: Decimal | None = None
+    updated_at: Timestamp | None = None
+```
+
+## File: src/app/domain/factories/aggregates.py
+```python
+from __future__ import annotations
+
+from collections.abc import Iterable
+from datetime import UTC, datetime
+
+from src.app.domain.aggregates.account_state import AccountState
+from src.app.domain.aggregates.market_snapshot import MarketSnapshot
+from src.app.domain.aggregates.trading_session import TradingSession
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.order_book_level import OrderBookLevel
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.ticker import Ticker
+from src.app.domain.value_objects.timestamp import Timestamp
 
 
-@dataclass(frozen=True)
-class PlaceOrderInput:
-    symbol: str
-    side: str
-    quantity: Decimal
-    price: Decimal | None
-    order_type: str = "LIMIT"
-    time_in_force: str = "GTC"
-    client_order_id: str | None = None
+def _ts_now() -> Timestamp:
+    return Timestamp(datetime.now(UTC))
 
 
-class PlaceOrderUseCase:
-    def __init__(self, exchange_factory: ExchangeServiceFactory):
-        self._exchange_factory = exchange_factory
+def build_account_state(
+    *, symbol: Symbol, account: Account, open_orders: Iterable[Order] = ()
+) -> AccountState:
+    state = AccountState(symbol=symbol, account=account, updated_at=_ts_now())
+    for order in open_orders:
+        state.record_order(order)
+    return state
 
-    async def execute(self, data: PlaceOrderInput) -> dict:
-        request = PlaceOrderRequest(
-            symbol=Symbol(data.symbol),
-            side=Side(data.side),
-            order_type=OrderType(data.order_type),
-            quantity=Quantity(data.quantity),
-            price=Price.from_single(data.price) if data.price is not None else None,
-            time_in_force=TimeInForce(data.time_in_force) if data.time_in_force else None,
-            client_order_id=data.client_order_id,
-        )
-        async with self._exchange_factory() as exchange:
-            order = await exchange.place_order(request)
-        return _serialize_order(order)
+
+def build_trading_session(
+    *, symbol: Symbol, orders: Iterable[Order] = (), trades: Iterable[Trade] = ()
+) -> TradingSession:
+    now = _ts_now()
+    session = TradingSession(symbol=symbol, started_at=now, last_activity_at=now)
+    for order in orders:
+        if order.status.value in {"NEW", "PARTIALLY_FILLED"}:
+            session.add_order(order)
+    for trade in trades:
+        session.record_trade(trade)
+    session.pop_events()  # discard reconstitution events
+    return session
+
+
+def build_market_snapshot(
+    *,
+    symbol: Symbol,
+    bids: Iterable[OrderBookLevel] = (),
+    asks: Iterable[OrderBookLevel] = (),
+    trades: Iterable[Trade] = (),
+    ticker: Ticker | None = None,
+) -> MarketSnapshot:
+    snapshot = MarketSnapshot(symbol=symbol, updated_at=_ts_now())
+    snapshot.update_depth(list(bids), list(asks))
+    for trade in trades:
+        snapshot.add_trade(trade)
+    if ticker is not None:
+        snapshot.update_ticker(ticker)
+    return snapshot
 ```
 
 ## File: src/app/infrastructure/exchange/mexc/factories.py
@@ -5365,6 +5368,129 @@ class AllocationResponse(BaseModel):
     )
 ```
 
+## File: src/app/application/trading/qrl/place_qrl_order.py
+```python
+from dataclasses import dataclass
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory, PlaceOrderRequest
+from src.app.application.trading.use_cases.place_order import _serialize_order
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.qrl_quantity import QrlQuantity
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.time_in_force import TimeInForce
+
+
+@dataclass(frozen=True)
+class PlaceQrlOrderCommand:
+    """Command carrying all validated VOs needed to place a QRL/USDT order."""
+
+    side: Side
+    order_type: OrderType
+    quantity: QrlQuantity
+    price: QrlPrice | None = None
+    time_in_force: TimeInForce | None = None
+    client_order_id: str | None = None
+
+
+class PlaceQrlOrder:
+    """Place QRL/USDT order with fixed symbol and validated VOs."""
+
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(self, command: PlaceQrlOrderCommand) -> dict:
+        price_vo = Price.from_single(command.price.value) if command.price else None
+        quantity_vo = Quantity(command.quantity.value)
+        request = PlaceOrderRequest(
+            symbol=Symbol("QRLUSDT"),
+            side=command.side,
+            order_type=command.order_type,
+            price=price_vo,
+            quantity=quantity_vo,
+            time_in_force=command.time_in_force,
+            client_order_id=command.client_order_id,
+        )
+        async with self._exchange_factory() as exchange:
+            order = await exchange.place_order(request)
+        return _serialize_order(order)
+```
+
+## File: src/app/application/trading/use_cases/place_order.py
+```python
+"""Trading use case: place order for QRL/USDT."""
+
+from dataclasses import dataclass
+from decimal import Decimal
+
+from src.app.application.ports.exchange_service import (
+    ExchangeServiceFactory,
+    PlaceOrderRequest,
+)
+from src.app.application.trading.dtos import OrderDTO
+from src.app.domain.entities.order import Order
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.time_in_force import TimeInForce
+
+
+def _serialize_order(order: Order) -> dict:
+    dto = OrderDTO(
+        order_id=order.order_id.value,
+        symbol=order.symbol.value,
+        side=order.side.value,
+        type=order.order_type.value,
+        status=order.status.value,
+        price=str(order.price.value) if order.price else None,
+        quantity=str(order.quantity.value),
+        executed_quantity=str(order.executed_quantity) if order.executed_quantity else None,
+        cumulative_quote_quantity=str(order.cumulative_quote_quantity)
+        if order.cumulative_quote_quantity
+        else None,
+        client_order_id=order.client_order_id.value if order.client_order_id else None,
+        created_at=order.created_at.value.isoformat(),
+        updated_at=order.updated_at.value.isoformat() if order.updated_at else None,
+        time_in_force=order.time_in_force.value if order.time_in_force else None,
+    )
+    return dto.to_dict()
+
+
+@dataclass(frozen=True)
+class PlaceOrderInput:
+    symbol: str
+    side: str
+    quantity: Decimal
+    price: Decimal | None
+    order_type: str = "LIMIT"
+    time_in_force: str = "GTC"
+    client_order_id: str | None = None
+
+
+class PlaceOrderUseCase:
+    def __init__(self, exchange_factory: ExchangeServiceFactory):
+        self._exchange_factory = exchange_factory
+
+    async def execute(self, data: PlaceOrderInput) -> dict:
+        request = PlaceOrderRequest(
+            symbol=Symbol(data.symbol),
+            side=Side(data.side),
+            order_type=OrderType(data.order_type),
+            quantity=Quantity(data.quantity),
+            price=Price.from_single(data.price) if data.price is not None else None,
+            time_in_force=TimeInForce(data.time_in_force) if data.time_in_force else None,
+            client_order_id=data.client_order_id,
+        )
+        async with self._exchange_factory() as exchange:
+            order = await exchange.place_order(request)
+        return _serialize_order(order)
+```
+
 ## File: src/app/interfaces/http/api/qrl_routes.py
 ```python
 import asyncio
@@ -5379,9 +5505,14 @@ from src.app.application.market.use_cases.get_market_trades import GetMarketTrad
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.application.trading.qrl.cancel_qrl_order import CancelQrlOrder
 from src.app.application.trading.qrl.get_qrl_order import GetQrlOrder
-from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
+from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder, PlaceQrlOrderCommand
 from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
 from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.qrl_quantity import QrlQuantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.time_in_force import TimeInForce
 from src.app.interfaces.http.dependencies import get_exchange_factory
 from src.app.interfaces.http.schemas import PlaceOrderRequest
 
@@ -5437,14 +5568,15 @@ async def qrl_place_order(
     exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
     usecase = PlaceQrlOrder(exchange_factory)
-    return await usecase.execute(
-        side=request.side,
-        order_type=request.order_type,
-        price=request.price,
-        quantity=request.quantity,
-        time_in_force=request.time_in_force,
+    command = PlaceQrlOrderCommand(
+        side=Side(request.side),
+        order_type=OrderType(request.order_type),
+        price=QrlPrice(request.price) if request.price is not None else None,
+        quantity=QrlQuantity(request.quantity),
+        time_in_force=TimeInForce(request.time_in_force) if request.time_in_force else None,
         client_order_id=request.client_order_id,
     )
+    return await usecase.execute(command)
 
 
 @router.post("/orders/{order_id}/cancel")
@@ -5522,6 +5654,7 @@ from src.app.domain.entities.account import Account
 from src.app.domain.entities.order import Order
 from src.app.domain.entities.trade import Trade
 from src.app.domain.value_objects.balance import Balance
+from src.app.domain.value_objects.client_order_id import ClientOrderId
 from src.app.domain.value_objects.order_book import DepthLevel, OrderBook
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
@@ -5594,7 +5727,7 @@ def order_from_api(payload: dict[str, Any]) -> Order:
         )),
         time_in_force=TimeInForce(payload["timeInForce"]) if payload.get("timeInForce") else None,
         created_at=_to_timestamp_from_ms(payload.get("transactTime", payload.get("createTime", 0))),
-        client_order_id=payload.get("clientOrderId") or payload.get("origClientOrderId"),
+        client_order_id=ClientOrderId(_coi) if (_coi := (payload.get("clientOrderId") or payload.get("origClientOrderId"))) else None,
         executed_quantity=_to_decimal(payload.get("executedQty", "0"))
         if payload.get("executedQty") is not None
         else None,
@@ -5660,6 +5793,7 @@ from src.app.application.ports.exchange_service import (
 from src.app.domain.entities.account import Account
 from src.app.domain.services.balance_comparison_rule import BalanceComparisonRule
 from src.app.domain.services.depth_calculator import DepthCalculator
+from src.app.domain.services.limit_price_calculator import LimitPriceCalculator
 from src.app.domain.services.slippage_analyzer import SlippageAnalyzer
 from src.app.domain.services.valuation_service import ValuationService
 from src.app.domain.value_objects.balance_comparison_result import BalanceComparisonResult
@@ -5717,6 +5851,7 @@ class AllocationUseCase:
         self._comparison_rule = BalanceComparisonRule()
         self._depth_calculator = DepthCalculator()
         self._slippage_analyzer = SlippageAnalyzer(slippage_threshold_pct)
+        self._limit_price_calculator = LimitPriceCalculator(AllocationConfig.PRICE_BUFFER_PCT)
         self._valuation_service = ValuationService()
         self._depth_limit = depth_limit
         self._target_quantity = target_quantity or AllocationConfig.TARGET_QUANTITY
@@ -5743,10 +5878,8 @@ class AllocationUseCase:
             filled, weighted_price = self._depth_calculator.compute(
                 order_book, comparison.preferred_side, self._target_quantity
             )
-            best_bid = _best_bid(order_book)
-            best_ask = _best_ask(order_book)
-            top_price = _best_price(order_book, comparison.preferred_side)
-            if top_price <= 0 or best_bid <= 0 or best_ask <= 0:
+            top_price = self._limit_price_calculator.best_price(comparison.preferred_side, order_book)
+            if top_price <= 0:
                 return _result_from_slippage(
                     request_id,
                     executed_at,
@@ -5762,11 +5895,8 @@ class AllocationUseCase:
             if not slippage.is_acceptable:
                 return _result_from_slippage(request_id, executed_at, slippage)
 
-            limit_price = _compute_limit_price(
-                side=comparison.preferred_side,
-                best_bid=best_bid,
-                best_ask=best_ask,
-                buffer_pct=AllocationConfig.PRICE_BUFFER_PCT,
+            limit_price = self._limit_price_calculator.compute(
+                comparison.preferred_side, order_book
             )
             if limit_price is None:
                 return _result_from_slippage(
@@ -5825,40 +5955,6 @@ def _build_order_command(*, side: Side, quantity: Quantity, limit_price: Decimal
         price=Price.from_single(limit_price),
         time_in_force=AllocationConfig.TIME_IN_FORCE,
     )
-
-
-def _best_price(book: OrderBook, side: Side) -> Decimal:
-    prices = [level.price for level in (book.asks if side.value == "BUY" else book.bids)]
-    if not prices:
-        return Decimal("0")
-    return min(prices) if side.value == "BUY" else max(prices)
-
-
-def _best_bid(book: OrderBook) -> Decimal:
-    bids = [level.price for level in book.bids]
-    return max(bids) if bids else Decimal("0")
-
-
-def _best_ask(book: OrderBook) -> Decimal:
-    asks = [level.price for level in book.asks]
-    return min(asks) if asks else Decimal("0")
-
-
-def _compute_limit_price(
-    *, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal
-) -> Decimal | None:
-    """Return a maker-style limit price that does not cross the spread."""
-    if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
-        return None
-    if side.value == "BUY":
-        candidate = best_bid * (Decimal("1") - buffer_pct)
-        if candidate >= best_ask:
-            return None
-        return candidate
-    candidate = best_ask * (Decimal("1") + buffer_pct)
-    if candidate <= best_bid:
-        return None
-    return candidate
 
 
 def _result_from_skip(
