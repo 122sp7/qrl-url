@@ -10,7 +10,38 @@
     window.Chart && chartEl
       ? new Chart(chartEl.getContext("2d"), {
           type: "line",
-          data: { labels: [], datasets: [{ data: [], borderColor: "#2196f3", fill: false, tension: 0.2 }] },
+          data: {
+            labels: [],
+            datasets: [{ label: "QRL/USDT", data: [], borderColor: "#9f6431", backgroundColor: "rgba(159, 100, 49, 0.12)", fill: true, tension: 0.28, pointRadius: 0, borderWidth: 2 }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+            },
+            scales: {
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  maxTicksLimit: 8,
+                  color: "#6f6559",
+                },
+              },
+              y: {
+                ticks: {
+                  color: "#6f6559",
+                },
+                grid: {
+                  color: "rgba(78, 57, 34, 0.08)",
+                },
+              },
+            },
+          },
         })
       : { data: { labels: [], datasets: [{ data: [] }] }, update() {} };
 

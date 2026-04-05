@@ -1,6 +1,36 @@
+:root {
+  --bg: #f4f1ea;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-strong: #ffffff;
+  --border: rgba(78, 57, 34, 0.12);
+  --text: #1d1a16;
+  --muted: #6f6559;
+  --accent: #9f6431;
+  --accent-strong: #7b451a;
+  --buy: #1f7a45;
+  --sell: #b03a2e;
+  --shadow: 0 18px 50px rgba(77, 55, 30, 0.08);
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(214, 174, 118, 0.24), transparent 28%),
+    linear-gradient(180deg, #f8f5ee 0%, #f0ebe1 100%);
+}
+
 body {
-  font-family: Arial, sans-serif;
-  margin: 24px;
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+  color: var(--text);
+  background: transparent;
 }
 
 .skip-link {
@@ -13,67 +43,178 @@ body {
 }
 
 .skip-link:focus {
-  left: 12px;
-  top: 12px;
+  left: 16px;
+  top: 16px;
   width: auto;
   height: auto;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: #fff;
-  border: 2px solid #2196f3;
+  border: 2px solid var(--accent);
   border-radius: 6px;
   z-index: 1000;
 }
 
-.dashboard-grid {
+.page-shell {
+  width: min(1600px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+  padding: 8px 4px 18px;
+}
+
+.eyebrow,
+.section-kicker {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.page-header h1,
+.card h2,
+.book-panel h3 {
+  margin: 0;
+}
+
+.page-header h1 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.05;
+}
+
+.page-subtitle {
+  width: min(72ch, 100%);
+  margin: 10px 0 0;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.hero-grid,
+.content-grid {
   display: grid;
-  grid-template-columns: 360px 1fr 360px;
-  grid-template-areas:
-    "price kline orderform"
-    "depth kline orderform"
-    "trades kline balances"
-    "trades kline orders";
-  gap: 12px;
+  gap: 20px;
   align-items: start;
 }
 
-@media (max-width: 1100px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    grid-template-areas:
-      "price"
-      "kline"
-      "orderform"
-      "depth"
-      "trades"
-      "balances"
-      "orders";
-  }
+.hero-grid {
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(300px, 360px);
+  margin-bottom: 20px;
+}
+
+.content-grid {
+  grid-template-columns: minmax(320px, 1.1fr) minmax(300px, 0.9fr) minmax(280px, 0.85fr);
+  grid-template-areas:
+    "depth trades balance"
+    "orders orders orders";
+}
+
+.depth-card {
+  grid-area: depth;
+}
+
+.trades-card {
+  grid-area: trades;
+}
+
+.balance-card {
+  grid-area: balance;
+}
+
+.orders-card {
+  grid-area: orders;
 }
 
 .card {
-  border: 1px solid #e0e0e0;
-  padding: 12px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  background: #fff;
+  border: 1px solid var(--border);
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  background: var(--surface);
+  backdrop-filter: blur(12px);
 }
 
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.card h2 {
+  font-size: 1.85rem;
+  line-height: 1.1;
+}
+
+.metric-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.metric-row,
 .price-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 16px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(78, 57, 34, 0.08);
 }
 
 .label {
-  color: #666;
+  color: var(--muted);
+  font-size: 0.96rem;
 }
 
 .value {
-  font-weight: bold;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-word;
+}
+
+.metric-row-strong .value {
+  font-size: 1.35rem;
+  color: var(--accent-strong);
+}
+
+.metric-row-dim .value {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.status-line {
+  min-height: 22px;
+  padding-top: 8px;
+}
+
+.error {
+  color: var(--sell);
 }
 
 canvas {
   max-width: 100%;
+}
+
+.chart-wrap {
+  position: relative;
+  min-height: 360px;
+  padding: 8px 0 0;
+}
+
+.market-card,
+.order-card {
+  min-height: 100%;
+}
+
+.chart-card {
+  min-height: 540px;
 }
 
 .depth-list,
@@ -82,10 +223,11 @@ canvas {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 200px;
+  max-height: 320px;
   overflow-y: auto;
-  border: 1px solid #eee;
-  border-radius: 6px;
+  border: 1px solid rgba(78, 57, 34, 0.08);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
 }
 
 .depth-list li,
@@ -93,9 +235,11 @@ canvas {
 .orders-list li {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 6px 8px;
-  border-bottom: 1px solid #f2f2f2;
-  font-size: 0.92rem;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(78, 57, 34, 0.08);
+  font-size: 0.93rem;
+  align-items: center;
 }
 
 .depth-list li:last-child,
@@ -111,185 +255,227 @@ canvas {
 }
 
 .trades-list .side.buy,
-.orders-list .side.buy {
-  color: #2e7d32;
+.orders-list .side.buy,
+.depth-list .side.buy {
+  color: var(--buy);
   font-weight: 700;
 }
 
 .trades-list .side.sell,
 .orders-list .side.sell {
-  color: #c62828;
+  color: var(--sell);
   font-weight: 700;
 }
 
-.depth-col {
-  flex: 1;
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.flex-row {
-  display: flex;
-  gap: 12px;
-}
-
-.vertical-stack {
+.book-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.price-card {
-  grid-area: price;
-  max-width: 360px;
-  width: 100%;
-  justify-self: start;
-}
-
-.kline-card {
-  grid-area: kline;
-}
-
-.depth-card {
-  grid-area: depth;
-  max-width: 360px;
-}
-
-.depth-card .depth-list {
-  max-height: 320px;
+.book-panel h3 {
+  font-size: 1rem;
+  color: var(--muted);
 }
 
 .depth-list li {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.trades-card {
-  grid-area: trades;
-  max-width: 360px;
-  width: 100%;
-  justify-self: start;
 }
 
 .trades-card .trades-list {
-  max-height: 150px;
+  max-height: 360px;
 }
 
 .trades-list li {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.orders-card {
-  grid-area: orders;
-  max-width: 360px;
-  width: 100%;
-  justify-self: start;
+  grid-template-columns: 0.8fr 1fr 0.9fr 1.45fr;
 }
 
 .orders-card .orders-list {
-  max-height: 240px;
-}
-
-.balance-card {
-  grid-area: balances;
-  max-width: 360px;
-  width: 100%;
-  justify-self: start;
-}
-
-.order-card {
-  grid-area: orderform;
-  max-width: 340px;
+  max-height: none;
 }
 
 .depth-list li {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 4px 6px;
-  font-size: 0.9rem;
-}
-
-.trades-list li {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 4px 6px;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .orders-list li {
-  /* Columns: ID | Side | Price | Quantity | Amount | Status | Action */
   grid-template-columns: 1.6fr 0.8fr 1fr 1fr 1fr 1fr 0.9fr;
-  padding: 4px 6px;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .orders-list .orders-header {
   position: sticky;
   top: 0;
-  background: #fafafa;
+  background: #f7f2ea;
   font-weight: 700;
   z-index: 1;
 }
 
 .orders-list .status-label {
-  color: #555;
+  color: var(--muted);
 }
 
 .orders-list .order-cancel {
-  padding: 6px 10px;
-  background: #2196f3;
-  color: #fff;
-  border: 1px solid #2196f3;
-  border-radius: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--accent-strong);
+  border: 1px solid rgba(159, 100, 49, 0.28);
+  border-radius: 999px;
 }
 
-.depth-list,
-.trades-list,
-.orders-list {
-  max-height: 240px;
+.orders-list .order-cancel:hover,
+.orders-list .order-cancel:focus-visible {
+  background: rgba(159, 100, 49, 0.08);
+}
+
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 form .form-row {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 0;
+}
+
+.form-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
 form label {
-  width: 120px;
-  color: #444;
+  width: auto;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.96rem;
 }
 
 form input,
 form select {
-  flex: 1;
-  padding: 6px 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(78, 57, 34, 0.18);
+  border-radius: var(--radius-sm);
+  background: #fffdfa;
+  color: var(--text);
+}
+
+form input:focus-visible,
+form select:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(159, 100, 49, 0.22);
+  outline-offset: 2px;
 }
 
 button {
-  padding: 8px 14px;
-  background: #2196f3;
+  padding: 10px 16px;
+  background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
+  font-weight: 700;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+.primary-action {
+  min-height: 50px;
 }
 
 .side-toggle {
-  display: inline-flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .side-btn {
-  background: #e0e0e0;
-  color: #333;
-  border: 1px solid #d0d0d0;
+  min-height: 44px;
+  background: #f0e6d8;
+  color: var(--muted);
+  border: 1px solid rgba(78, 57, 34, 0.12);
 }
 
 .side-btn.active {
-  background: #2196f3;
+  background: var(--accent);
   color: #fff;
-  border-color: #2196f3;
+  border-color: var(--accent);
 }
 
 .order-result {
-  margin-top: 8px;
-  color: #333;
+  min-height: 22px;
+  color: var(--text);
   font-size: 0.95rem;
+}
+
+@media (max-width: 1320px) {
+  .hero-grid {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  }
+
+  .order-card {
+    grid-column: 1 / -1;
+  }
+
+  .content-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "depth trades"
+      "balance balance"
+      "orders orders";
+  }
+}
+
+@media (max-width: 860px) {
+  .page-shell {
+    width: min(100%, calc(100% - 20px));
+    padding-top: 18px;
+  }
+
+  .hero-grid,
+  .content-grid,
+  .book-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content-grid {
+    grid-template-areas:
+      "depth"
+      "trades"
+      "balance"
+      "orders";
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .chart-card {
+    min-height: auto;
+  }
+
+  .chart-wrap {
+    min-height: 280px;
+  }
+
+  .orders-list li,
+  .orders-list .orders-header,
+  .trades-list li {
+    font-size: 0.86rem;
+  }
 }
