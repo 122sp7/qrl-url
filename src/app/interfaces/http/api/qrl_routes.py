@@ -10,9 +10,14 @@ from src.app.application.market.use_cases.get_market_trades import GetMarketTrad
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.application.trading.qrl.cancel_qrl_order import CancelQrlOrder
 from src.app.application.trading.qrl.get_qrl_order import GetQrlOrder
-from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
+from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder, PlaceQrlOrderCommand
 from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
 from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
+from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.qrl_quantity import QrlQuantity
+from src.app.domain.value_objects.side import Side
+from src.app.domain.value_objects.time_in_force import TimeInForce
 from src.app.interfaces.http.dependencies import get_exchange_factory
 from src.app.interfaces.http.schemas import PlaceOrderRequest
 
@@ -68,14 +73,15 @@ async def qrl_place_order(
     exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
 ):
     usecase = PlaceQrlOrder(exchange_factory)
-    return await usecase.execute(
-        side=request.side,
-        order_type=request.order_type,
-        price=request.price,
-        quantity=request.quantity,
-        time_in_force=request.time_in_force,
+    command = PlaceQrlOrderCommand(
+        side=Side(request.side),
+        order_type=OrderType(request.order_type),
+        price=QrlPrice(request.price) if request.price is not None else None,
+        quantity=QrlQuantity(request.quantity),
+        time_in_force=TimeInForce(request.time_in_force) if request.time_in_force else None,
         client_order_id=request.client_order_id,
     )
+    return await usecase.execute(command)
 
 
 @router.post("/orders/{order_id}/cancel")

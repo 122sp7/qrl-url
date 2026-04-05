@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
 
 
 @dataclass(frozen=True)

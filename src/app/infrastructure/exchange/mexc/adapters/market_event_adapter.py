@@ -1,18 +1,18 @@
 from collections.abc import AsyncIterator
 
-from app.application.ports.exchange_gateway import ExchangeGateway
-from app.domain.events.balance_event import BalanceEvent
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.order_event import OrderEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import (
+from src.app.application.ports.exchange_gateway import ExchangeGateway
+from src.app.domain.events.balance_event import BalanceEvent
+from src.app.domain.events.market_depth_event import MarketDepthEvent
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.events.trade_event import TradeEvent
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import (
     PrivateAccountV3Api_pb2,
     PrivateOrdersV3Api_pb2,
     PublicAggreDepthsV3Api_pb2,
     PublicDealsV3Api_pb2,
 )
-from app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
+from src.app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
 
 from .balance_mapper import balance_proto_to_domain
 from .depth_mapper import depth_proto_to_domain

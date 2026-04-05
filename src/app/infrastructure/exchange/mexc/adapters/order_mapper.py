@@ -1,10 +1,10 @@
-from app.domain.events.order_event import OrderEvent
-from app.domain.value_objects.order_id import OrderId
-from app.domain.value_objects.order_status import OrderStatus
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import PrivateOrdersV3Api_pb2
+from src.app.domain.events.order_event import OrderEvent
+from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import PrivateOrdersV3Api_pb2
 
 
 def order_proto_to_domain(proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api) -> OrderEvent:

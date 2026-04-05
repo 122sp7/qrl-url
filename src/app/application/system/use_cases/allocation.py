@@ -12,6 +12,7 @@ from src.app.application.ports.exchange_service import (
 from src.app.domain.entities.account import Account
 from src.app.domain.services.balance_comparison_rule import BalanceComparisonRule
 from src.app.domain.services.depth_calculator import DepthCalculator
+from src.app.domain.services.limit_price_calculator import LimitPriceCalculator
 from src.app.domain.services.slippage_analyzer import SlippageAnalyzer
 from src.app.domain.services.valuation_service import ValuationService
 from src.app.domain.value_objects.balance_comparison_result import BalanceComparisonResult
@@ -69,6 +70,7 @@ class AllocationUseCase:
         self._comparison_rule = BalanceComparisonRule()
         self._depth_calculator = DepthCalculator()
         self._slippage_analyzer = SlippageAnalyzer(slippage_threshold_pct)
+        self._limit_price_calculator = LimitPriceCalculator(AllocationConfig.PRICE_BUFFER_PCT)
         self._valuation_service = ValuationService()
         self._depth_limit = depth_limit
         self._target_quantity = target_quantity or AllocationConfig.TARGET_QUANTITY
@@ -95,10 +97,8 @@ class AllocationUseCase:
             filled, weighted_price = self._depth_calculator.compute(
                 order_book, comparison.preferred_side, self._target_quantity
             )
-            best_bid = _best_bid(order_book)
-            best_ask = _best_ask(order_book)
-            top_price = _best_price(order_book, comparison.preferred_side)
-            if top_price <= 0 or best_bid <= 0 or best_ask <= 0:
+            top_price = self._limit_price_calculator.best_price(comparison.preferred_side, order_book)
+            if top_price <= 0:
                 return _result_from_slippage(
                     request_id,
                     executed_at,
@@ -114,11 +114,8 @@ class AllocationUseCase:
             if not slippage.is_acceptable:
                 return _result_from_slippage(request_id, executed_at, slippage)
 
-            limit_price = _compute_limit_price(
-                side=comparison.preferred_side,
-                best_bid=best_bid,
-                best_ask=best_ask,
-                buffer_pct=AllocationConfig.PRICE_BUFFER_PCT,
+            limit_price = self._limit_price_calculator.compute(
+                comparison.preferred_side, order_book
             )
             if limit_price is None:
                 return _result_from_slippage(
@@ -177,40 +174,6 @@ def _build_order_command(*, side: Side, quantity: Quantity, limit_price: Decimal
         price=Price.from_single(limit_price),
         time_in_force=AllocationConfig.TIME_IN_FORCE,
     )
-
-
-def _best_price(book: OrderBook, side: Side) -> Decimal:
-    prices = [level.price for level in (book.asks if side.value == "BUY" else book.bids)]
-    if not prices:
-        return Decimal("0")
-    return min(prices) if side.value == "BUY" else max(prices)
-
-
-def _best_bid(book: OrderBook) -> Decimal:
-    bids = [level.price for level in book.bids]
-    return max(bids) if bids else Decimal("0")
-
-
-def _best_ask(book: OrderBook) -> Decimal:
-    asks = [level.price for level in book.asks]
-    return min(asks) if asks else Decimal("0")
-
-
-def _compute_limit_price(
-    *, side: Side, best_bid: Decimal, best_ask: Decimal, buffer_pct: Decimal
-) -> Decimal | None:
-    """Return a maker-style limit price that does not cross the spread."""
-    if best_bid <= 0 or best_ask <= 0 or best_bid >= best_ask:
-        return None
-    if side.value == "BUY":
-        candidate = best_bid * (Decimal("1") - buffer_pct)
-        if candidate >= best_ask:
-            return None
-        return candidate
-    candidate = best_ask * (Decimal("1") + buffer_pct)
-    if candidate <= best_bid:
-        return None
-    return candidate
 
 
 def _result_from_skip(

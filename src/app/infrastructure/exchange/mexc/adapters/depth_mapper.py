@@ -1,8 +1,8 @@
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.infrastructure.exchange.mexc.generated import PublicAggreDepthsV3Api_pb2
+from src.app.domain.events.market_depth_event import MarketDepthEvent
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.infrastructure.exchange.mexc.generated import PublicAggreDepthsV3Api_pb2
 
 
 def depth_proto_to_domain(

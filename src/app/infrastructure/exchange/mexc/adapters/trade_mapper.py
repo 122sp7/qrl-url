@@ -1,9 +1,9 @@
-from app.domain.events.trade_event import TradeEvent
-from app.domain.value_objects.price import Price
-from app.domain.value_objects.quantity import Quantity
-from app.domain.value_objects.symbol import Symbol
-from app.domain.value_objects.trade_id import TradeId
-from app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
+from src.app.domain.events.trade_event import TradeEvent
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.quantity import Quantity
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.trade_id import TradeId
+from src.app.infrastructure.exchange.mexc.generated import PublicDealsV3Api_pb2
 
 _MEXC_TRADE_TYPE_SELL = 2
 

@@ -3,14 +3,18 @@ from decimal import Decimal
 
 import pytest
 
-from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
+from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder, PlaceQrlOrderCommand
 from src.app.domain.entities.order import Order
+from src.app.domain.value_objects.client_order_id import ClientOrderId
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.qrl_quantity import QrlQuantity
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.time_in_force import TimeInForce
 from src.app.domain.value_objects.timestamp import Timestamp
 
 
@@ -36,7 +40,7 @@ class FakeExchange:
             quantity=request.quantity,
             created_at=Timestamp(datetime.now(UTC)),
             time_in_force=request.time_in_force,
-            client_order_id=request.client_order_id,
+            client_order_id=ClientOrderId(request.client_order_id) if request.client_order_id else None,
         )
 
 
@@ -45,14 +49,15 @@ async def test_place_qrl_order_accepts_primitives() -> None:
     exchange = FakeExchange()
     usecase = PlaceQrlOrder(lambda: exchange)
 
-    result = await usecase.execute(
-        side="BUY",
-        order_type="LIMIT",
-        price=Decimal("1.23456"),
-        quantity=Decimal("10"),
-        time_in_force="GTC",
+    command = PlaceQrlOrderCommand(
+        side=Side("BUY"),
+        order_type=OrderType("LIMIT"),
+        price=QrlPrice(Decimal("1.23456")),
+        quantity=QrlQuantity(Decimal("10")),
+        time_in_force=TimeInForce("GTC"),
         client_order_id="abc",
     )
+    result = await usecase.execute(command)
 
     assert len(exchange.requests) == 1
     request = exchange.requests[0]

@@ -22,25 +22,24 @@ def _ts_now() -> Timestamp:
 def build_account_state(
     *, symbol: Symbol, account: Account, open_orders: Iterable[Order] = ()
 ) -> AccountState:
-    return AccountState(
-        symbol=symbol,
-        account=account,
-        open_orders=list(open_orders),
-        updated_at=_ts_now(),
-    )
+    state = AccountState(symbol=symbol, account=account, updated_at=_ts_now())
+    for order in open_orders:
+        state.record_order(order)
+    return state
 
 
 def build_trading_session(
     *, symbol: Symbol, orders: Iterable[Order] = (), trades: Iterable[Trade] = ()
 ) -> TradingSession:
     now = _ts_now()
-    return TradingSession(
-        symbol=symbol,
-        open_orders=list(orders),
-        trades=list(trades),
-        started_at=now,
-        last_activity_at=now,
-    )
+    session = TradingSession(symbol=symbol, started_at=now, last_activity_at=now)
+    for order in orders:
+        if order.status.value in {"NEW", "PARTIALLY_FILLED"}:
+            session.add_order(order)
+    for trade in trades:
+        session.record_trade(trade)
+    session.pop_events()  # discard reconstitution events
+    return session
 
 
 def build_market_snapshot(
@@ -51,11 +50,10 @@ def build_market_snapshot(
     trades: Iterable[Trade] = (),
     ticker: Ticker | None = None,
 ) -> MarketSnapshot:
-    return MarketSnapshot(
-        symbol=symbol,
-        bids=list(bids),
-        asks=list(asks),
-        trades=list(trades),
-        ticker=ticker,
-        updated_at=_ts_now(),
-    )
+    snapshot = MarketSnapshot(symbol=symbol, updated_at=_ts_now())
+    snapshot.update_depth(list(bids), list(asks))
+    for trade in trades:
+        snapshot.add_trade(trade)
+    if ticker is not None:
+        snapshot.update_ticker(ticker)
+    return snapshot

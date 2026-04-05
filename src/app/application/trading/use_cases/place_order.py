@@ -30,7 +30,7 @@ def _serialize_order(order: Order) -> dict:
         cumulative_quote_quantity=str(order.cumulative_quote_quantity)
         if order.cumulative_quote_quantity
         else None,
-        client_order_id=order.client_order_id,
+        client_order_id=order.client_order_id.value if order.client_order_id else None,
         created_at=order.created_at.value.isoformat(),
         updated_at=order.updated_at.value.isoformat() if order.updated_at else None,
         time_in_force=order.time_in_force.value if order.time_in_force else None,

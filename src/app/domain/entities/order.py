@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
+from src.app.domain.value_objects.client_order_id import ClientOrderId
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
 from src.app.domain.value_objects.order_type import OrderType
@@ -25,7 +26,7 @@ class Order:
     quantity: Quantity
     created_at: Timestamp
     time_in_force: TimeInForce | None = None
-    client_order_id: str | None = None
+    client_order_id: ClientOrderId | None = None
     executed_quantity: Decimal | None = None
     cumulative_quote_quantity: Decimal | None = None
     updated_at: Timestamp | None = None

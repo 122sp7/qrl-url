@@ -8,6 +8,7 @@ from src.app.domain.entities.account import Account
 from src.app.domain.entities.order import Order
 from src.app.domain.entities.trade import Trade
 from src.app.domain.value_objects.balance import Balance
+from src.app.domain.value_objects.client_order_id import ClientOrderId
 from src.app.domain.value_objects.order_book import DepthLevel, OrderBook
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
@@ -80,7 +81,7 @@ def order_from_api(payload: dict[str, Any]) -> Order:
         )),
         time_in_force=TimeInForce(payload["timeInForce"]) if payload.get("timeInForce") else None,
         created_at=_to_timestamp_from_ms(payload.get("transactTime", payload.get("createTime", 0))),
-        client_order_id=payload.get("clientOrderId") or payload.get("origClientOrderId"),
+        client_order_id=ClientOrderId(_coi) if (_coi := (payload.get("clientOrderId") or payload.get("origClientOrderId"))) else None,
         executed_quantity=_to_decimal(payload.get("executedQty", "0"))
         if payload.get("executedQty") is not None
         else None,

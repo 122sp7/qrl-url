@@ -1,7 +1,7 @@
 from decimal import Decimal
 
-from app.domain.events.balance_event import BalanceEvent
-from app.infrastructure.exchange.mexc.generated import PrivateAccountV3Api_pb2
+from src.app.domain.events.balance_event import BalanceEvent
+from src.app.infrastructure.exchange.mexc.generated import PrivateAccountV3Api_pb2
 
 
 def balance_proto_to_domain(
