@@ -3858,6 +3858,162 @@ def get_exchange_factory() -> ExchangeServiceFactory:
 })();
 ```
 
+## File: src/app/interfaces/http/schemas.py
+```python
+"""Pydantic schemas for interface layer requests/responses."""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class PlaceOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    side: Literal["BUY", "SELL"]
+    order_type: Literal["LIMIT", "MARKET"] = Field(default="LIMIT", alias="type")
+    quantity: Decimal
+    price: Decimal | None = None
+    time_in_force: Literal["GTC", "IOC", "FOK"] | None = Field(default="GTC", alias="timeInForce")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class CancelOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    order_id: str | None = Field(default=None, alias="orderId")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class GetOrderRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+    order_id: str | None = Field(default=None, alias="orderId")
+    client_order_id: str | None = Field(default=None, alias="clientOrderId")
+
+
+class ListTradesRequest(BaseModel):
+    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
+
+
+class AllocationResponse(BaseModel):
+    """Response returned when the allocation task is triggered."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: str = Field(description="Identifier for the allocation trigger")
+    status: str = Field(description="Execution status for the allocation task")
+    executed_at: datetime = Field(description="UTC timestamp when the task executed")
+    action: str = Field(description="Trade action executed (BUY, SELL, SKIP, REJECTED)")
+    order_id: str | None = Field(default=None, description="Order identifier returned by the exchange")
+    reason: str | None = Field(default=None, description="Reason when action is skipped or rejected")
+    slippage_pct: Decimal | None = Field(
+        default=None, description="Calculated slippage percentage for the planned order"
+    )
+    expected_fill: Decimal | None = Field(
+        default=None, description="Expected fill quantity based on current depth"
+    )
+```
+
+## File: main.py
+```python
+"""Entrypoint module for the FastAPI application."""
+
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional in production images
+    def load_dotenv() -> None:  # type: ignore
+        return None
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+
+# Ensure src is on sys.path when running `python main.py` directly (e.g., Cloud Run, local)
+ROOT = Path(__file__).parent
+SRC = ROOT / "src"
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+if SRC.exists() and str(SRC) not in sys.path:
+    sys.path.append(str(SRC))
+
+from src.app.interfaces.http.api import account_routes, market_routes, system_routes, tasks_routes, trading_routes, ws_routes
+from src.app.interfaces.http.api import qrl_routes, trading_api
+from src.app.interfaces.http.pages import dashboard_routes
+from src.app.interfaces.http.dependencies import build_exchange_factory
+
+load_dotenv()
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title="QRL/USDT Trading Bot",
+        version="0.1.0",
+    )
+
+    static_dir = Path(__file__).parent / "src" / "app" / "interfaces" / "http" / "pages" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    app.include_router(account_routes.router, prefix="/api/account", tags=["account"])
+    app.include_router(market_routes.router, prefix="/api/market", tags=["market"])
+    app.include_router(system_routes.router, prefix="/api/system", tags=["system"])
+    app.include_router(trading_routes.router, prefix="/api/trading", tags=["trading"])
+    app.include_router(qrl_routes.router, prefix="/api/qrl", tags=["qrl"])
+    app.include_router(trading_api.router, tags=["price"])
+    app.include_router(ws_routes.router, prefix="/ws", tags=["ws"])
+    app.include_router(tasks_routes.router, prefix="/tasks", tags=["tasks"])
+    app.include_router(tasks_routes.api_router, prefix="/api/tasks", tags=["tasks"])
+    app.include_router(dashboard_routes.router, tags=["pages"])
+    app.get("/", response_class=dashboard_routes.HTMLResponse)(dashboard_routes.dashboard)
+
+    @app.get("/health", tags=["system"])
+    async def health() -> dict[str, str]:
+        """Health check endpoint used by deployment probes."""
+        return {"status": "ok"}
+
+    return app
+
+
+app = create_app()
+
+
+async def _demo_mexc_usage() -> None:
+    """Demonstrate how to initialize the MexcService and call a simple API."""
+    factory = build_exchange_factory()
+    try:
+        async with factory() as service:
+            server_time = await service.get_server_time()
+            print(f"[demo] MEXC server time: {server_time.value.isoformat()}")
+    except Exception as exc:  # pragma: no cover - demonstration only
+        print(f"[demo] Unable to load MEXC credentials: {exc}")
+
+
+def _should_run_demo() -> bool:
+    """Gate demo execution behind an opt-in flag."""
+    return os.getenv("RUN_MEXC_DEMO", "0") == "1"
+
+
+def _run_server() -> None:
+    """Start the uvicorn server using environment configuration."""
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8080"))
+    uvicorn.run(app, host=host, port=port, reload=False)
+
+
+if __name__ == "__main__":
+    if _should_run_demo():
+        asyncio.run(_demo_mexc_usage())
+    _run_server()
+
+__all__ = ["app"]
+```
+
 ## File: src/app/application/account/use_cases/get_balance.py
 ```python
 """Account use case: get subaccount balance with valuation."""
@@ -4907,106 +5063,6 @@ async def qrl_summary(
 </html>
 ```
 
-## File: main.py
-```python
-"""Entrypoint module for the FastAPI application."""
-
-import asyncio
-import os
-import sys
-from pathlib import Path
-
-try:
-    from dotenv import load_dotenv
-except ModuleNotFoundError:  # pragma: no cover - optional in production images
-    def load_dotenv() -> None:  # type: ignore
-        return None
-
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-
-# Ensure src is on sys.path when running `python main.py` directly (e.g., Cloud Run, local)
-ROOT = Path(__file__).parent
-SRC = ROOT / "src"
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-if SRC.exists() and str(SRC) not in sys.path:
-    sys.path.append(str(SRC))
-
-from src.app.interfaces.http.api import account_routes, market_routes, system_routes, tasks_routes, trading_routes, ws_routes
-from src.app.interfaces.http.api import qrl_routes, trading_api
-from src.app.interfaces.http.pages import dashboard_routes
-from src.app.interfaces.http.dependencies import build_exchange_factory
-
-load_dotenv()
-
-
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
-    app = FastAPI(
-        title="QRL/USDT Trading Bot",
-        version="0.1.0",
-    )
-
-    static_dir = Path(__file__).parent / "src" / "app" / "interfaces" / "http" / "pages" / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-    app.include_router(account_routes.router, prefix="/api/account", tags=["account"])
-    app.include_router(market_routes.router, prefix="/api/market", tags=["market"])
-    app.include_router(system_routes.router, prefix="/api/system", tags=["system"])
-    app.include_router(trading_routes.router, prefix="/api/trading", tags=["trading"])
-    app.include_router(qrl_routes.router, prefix="/api/qrl", tags=["qrl"])
-    app.include_router(trading_api.router, tags=["price"])
-    app.include_router(ws_routes.router, prefix="/ws", tags=["ws"])
-    app.include_router(tasks_routes.router, prefix="/tasks", tags=["tasks"])
-    app.include_router(tasks_routes.api_router, prefix="/api/tasks", tags=["tasks"])
-    app.include_router(dashboard_routes.router, tags=["pages"])
-    app.get("/", response_class=dashboard_routes.HTMLResponse)(dashboard_routes.dashboard)
-
-    @app.get("/health", tags=["system"])
-    async def health() -> dict[str, str]:
-        """Health check endpoint used by deployment probes."""
-        return {"status": "ok"}
-
-    return app
-
-
-app = create_app()
-
-
-async def _demo_mexc_usage() -> None:
-    """Demonstrate how to initialize the MexcService and call a simple API."""
-    factory = build_exchange_factory()
-    try:
-        async with factory() as service:
-            server_time = await service.get_server_time()
-            print(f"[demo] MEXC server time: {server_time.value.isoformat()}")
-    except Exception as exc:  # pragma: no cover - demonstration only
-        print(f"[demo] Unable to load MEXC credentials: {exc}")
-
-
-def _should_run_demo() -> bool:
-    """Gate demo execution behind an opt-in flag."""
-    return os.getenv("RUN_MEXC_DEMO", "0") == "1"
-
-
-def _run_server() -> None:
-    """Start the uvicorn server using environment configuration."""
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8080"))
-    uvicorn.run(app, host=host, port=port, reload=False)
-
-
-if __name__ == "__main__":
-    if _should_run_demo():
-        asyncio.run(_demo_mexc_usage())
-    _run_server()
-
-__all__ = ["app"]
-```
-
 ## File: src/app/application/trading/use_cases/list_trades.py
 ```python
 """Trading use case: list trades for QRL/USDT."""
@@ -5242,90 +5298,6 @@ def order_book_from_api(payload: dict[str, Any]) -> OrderBook:
     return OrderBook(bids=bids, asks=asks)
 ```
 
-## File: src/app/interfaces/http/schemas.py
-```python
-"""Pydantic schemas for interface layer requests/responses."""
-
-from datetime import datetime
-from decimal import Decimal
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class PlaceOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    side: Literal["BUY", "SELL"]
-    order_type: Literal["LIMIT", "MARKET"] = Field(default="LIMIT", alias="type")
-    quantity: Decimal
-    price: Decimal | None = None
-    time_in_force: Literal["GTC", "IOC", "FOK"] | None = Field(default="GTC", alias="timeInForce")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class CancelOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    order_id: str | None = Field(default=None, alias="orderId")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class GetOrderRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-    order_id: str | None = Field(default=None, alias="orderId")
-    client_order_id: str | None = Field(default=None, alias="clientOrderId")
-
-
-class ListTradesRequest(BaseModel):
-    symbol: str = Field(default="QRLUSDT", description="Trading symbol")
-
-
-class AllocationResponse(BaseModel):
-    """Response returned when the allocation task is triggered."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    request_id: str = Field(description="Identifier for the allocation trigger")
-    status: str = Field(description="Execution status for the allocation task")
-    executed_at: datetime = Field(description="UTC timestamp when the task executed")
-    action: str = Field(description="Trade action executed (BUY, SELL, SKIP, REJECTED)")
-    order_id: str | None = Field(default=None, description="Order identifier returned by the exchange")
-    reason: str | None = Field(default=None, description="Reason when action is skipped or rejected")
-    slippage_pct: Decimal | None = Field(
-        default=None, description="Calculated slippage percentage for the planned order"
-    )
-    expected_fill: Decimal | None = Field(
-        default=None, description="Expected fill quantity based on current depth"
-    )
-```
-
-## File: src/app/interfaces/tasks/entrypoints.py
-```python
-"""HTTP/Scheduler entrypoints for background tasks."""
-
-import asyncio
-import os
-
-from src.app.application.system.use_cases.allocation import AllocationResult, AllocationUseCase
-from src.app.interfaces.http.dependencies import build_exchange_factory
-
-
-def _allocation_timeout_seconds() -> float:
-    """Read the scheduler task timeout from the environment."""
-    raw: str | None = os.getenv("TASK_TIMEOUT_SECONDS", "20")
-    try:
-        return float(raw)
-    except ValueError:
-        return 20.0
-
-
-async def run_allocation(timeout_seconds: float | None = None) -> AllocationResult:
-    """Trigger the allocation use case for Cloud Scheduler with a bounded runtime."""
-    exchange_factory = build_exchange_factory()
-    usecase = AllocationUseCase(exchange_factory)
-    timeout = timeout_seconds or _allocation_timeout_seconds()
-    return await asyncio.wait_for(usecase.execute(), timeout=timeout)
-```
-
 ## File: src/app/interfaces/http/api/tasks_routes.py
 ```python
 import asyncio
@@ -5380,6 +5352,34 @@ async def trigger_allocation() -> AllocationResponse:
 async def trigger_allocation_api() -> AllocationResponse:
     """API-aligned alias to trigger allocation under the /api/tasks namespace."""
     return await _trigger_allocation()
+```
+
+## File: src/app/interfaces/tasks/entrypoints.py
+```python
+"""HTTP/Scheduler entrypoints for background tasks."""
+
+import asyncio
+import os
+
+from src.app.application.system.use_cases.allocation import AllocationResult, AllocationUseCase
+from src.app.interfaces.http.dependencies import build_exchange_factory
+
+
+def _allocation_timeout_seconds() -> float:
+    """Read the scheduler task timeout from the environment."""
+    raw: str | None = os.getenv("TASK_TIMEOUT_SECONDS", "20")
+    try:
+        return float(raw)
+    except ValueError:
+        return 20.0
+
+
+async def run_allocation(timeout_seconds: float | None = None) -> AllocationResult:
+    """Trigger the allocation use case for Cloud Scheduler with a bounded runtime."""
+    exchange_factory = build_exchange_factory()
+    usecase = AllocationUseCase(exchange_factory)
+    timeout = timeout_seconds or _allocation_timeout_seconds()
+    return await asyncio.wait_for(usecase.execute(), timeout=timeout)
 ```
 
 ## File: src/app/application/system/use_cases/allocation.py
