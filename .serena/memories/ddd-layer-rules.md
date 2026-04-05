@@ -17,6 +17,15 @@ Interface → Application → Domain ← Infrastructure (Infrastructure implemen
 | Repository impl | src/app/infrastructure/exchange/ | Implements port |
 | HTTP Controller | src/app/interfaces/http/ | Maps DTO ↔ Command/Response |
 
+## Factory pattern (aggregates.py)
+- Factory 使用 Aggregate 行為方法重建：build_trading_session() 呼叫 add_order()/record_trade()；build_account_state() 呼叫 record_order()；build_market_snapshot() 呼叫 update_depth()/add_trade()/update_ticker()
+- 重建後呼叫 pop_events() 清除重建產生的事件
+
+## Command Object pattern
+- Use Case 接受 Command frozen dataclass，不接受散裝 primitives
+- 範例：PlaceQrlOrderCommand 含 Side, OrderType, QrlPrice, QrlQuantity, TimeInForce VO
+- Controller (Interface 層) 負責 Pydantic → VO → Command 轉換
+
 ## Protobuf boundary (CRITICAL)
 - Domain must NOT import _pb2
 - Application must NOT import _pb2

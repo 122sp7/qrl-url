@@ -35,12 +35,12 @@ steps:
       - '--vpc-connector=qrl-run-connector'
       - '--vpc-egress=all-traffic'
       # Resource limits
-      - '--memory=512Mi'
-      - '--cpu=1'
+      - '--memory=128Mi'
+      - '--cpu=0.25'
       - '--min-instances=0'
-      - '--max-instances=10'
-      - '--concurrency=80'
-      - '--timeout=300s'
+      - '--max-instances=1'
+      - '--concurrency=1'
+      - '--timeout=60'
       # Startup configuration - enable CPU boost for faster cold starts
       - '--cpu-boost'
       # Environment variables from Secret Manager
