@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -18,10 +19,38 @@ from src.app.domain.value_objects.qrl_price import QrlPrice
 from src.app.domain.value_objects.qrl_quantity import QrlQuantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.infrastructure.external.redis_client import RedisClient
 from src.app.interfaces.http.dependencies import get_exchange_factory
 from src.app.interfaces.http.schemas import PlaceOrderRequest
 
 router = APIRouter()
+
+
+async def _trades_from_redis(limit: int = 200) -> list[dict] | None:
+    """Return trades from Redis Sorted Set, or None if REDIS_URL not configured."""
+    redis_url = os.environ.get("REDIS_URL", "")
+    if not redis_url:
+        return None
+    client = RedisClient(redis_url)
+    await client.connect()
+    try:
+        return await client.list_trades(limit)
+    finally:
+        await client.close()
+
+
+@router.get("/trades")
+async def qrl_trades(
+    limit: int = Query(default=200, ge=1, le=500),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Return myTrades from Redis when available, falling back to MEXC."""
+    cached = await _trades_from_redis(limit)
+    if cached is not None:
+        return cached
+    usecase = ListTradesUseCase(exchange_factory)
+    return await usecase.execute(symbol="QRLUSDT")
+
 
 
 @router.get("/price")
@@ -114,20 +143,23 @@ async def qrl_summary(
     depth_uc = GetQrlDepth(exchange_factory, limit=depth_limit)
     balance_uc = GetBalanceUseCase(exchange_factory)
     orders_uc = ListOrdersUseCase(exchange_factory)
-    trades_uc = ListTradesUseCase(exchange_factory)
     market_trades_uc = GetMarketTradesUseCase(exchange_factory)
 
     (
-        price_result, kline_result, depth_result, balance_result, orders, trades, market_trades
+        price_result, kline_result, depth_result, balance_result, orders, market_trades
     ) = await asyncio.gather(
         price_uc.execute(),
         kline_uc.execute(),
         depth_uc.execute(),
         balance_uc.execute(),
         orders_uc.execute(symbol="QRLUSDT"),
-        trades_uc.execute("QRLUSDT"),
         market_trades_uc.execute(),
     )
+
+    cached_trades = await _trades_from_redis(trades_limit)
+    if cached_trades is None:
+        trades_uc = ListTradesUseCase(exchange_factory)
+        cached_trades = await trades_uc.execute("QRLUSDT")
 
     normalized_klines = [
         {
@@ -142,6 +174,6 @@ async def qrl_summary(
         "depth": depth_result,
         "balance": balance_result,
         "orders": orders,
-        "trades": trades,
+        "trades": cached_trades,
         "market_trades": market_trades[:trades_limit],
     }

@@ -26,6 +26,9 @@ websockets==12.0
 # Protocol buffers (WS payload decoding)
 protobuf==4.25.1
 
+# Redis (async, Redis Cloud)
+redis==5.0.1
+
 # Supabase client
 supabase==2.4.0
 

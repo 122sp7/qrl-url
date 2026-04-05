@@ -1,5 +1,6 @@
 """System use case to expose an allocation trigger for schedulers."""
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -9,6 +10,7 @@ from src.app.application.ports.exchange_service import (
     ExchangeServiceFactory,
     PlaceOrderRequest,
 )
+from src.app.infrastructure.external.redis_client import RedisClient
 from src.app.domain.entities.account import Account
 from src.app.domain.services.balance_comparison_rule import BalanceComparisonRule
 from src.app.domain.services.depth_calculator import DepthCalculator
@@ -75,6 +77,8 @@ class AllocationUseCase:
         self._depth_limit = depth_limit
         self._target_quantity = target_quantity or AllocationConfig.TARGET_QUANTITY
         self._limit_price = Decimal(limit_price)
+        redis_url = os.environ.get("REDIS_URL", "")
+        self._redis: RedisClient | None = RedisClient(redis_url) if redis_url else None
 
     async def execute(self) -> AllocationResult:
         """Compare balances, evaluate depth/slippage, and submit a balancing order."""
@@ -140,6 +144,9 @@ class AllocationUseCase:
                     time_in_force=command.time_in_force,
                 )
             )
+            my_trades = await svc.list_trades(AllocationConfig.SYMBOL)
+
+        await self._persist_trades(my_trades, executed_at)
 
         return _result_from_success(
             request_id=request_id,
@@ -148,6 +155,30 @@ class AllocationUseCase:
             side=command.side,
             order_id=order.order_id.value,
         )
+
+    async def _persist_trades(self, trades, executed_at: datetime) -> None:
+        if self._redis is None or not trades:
+            return
+        records = [
+            {
+                "trade_id": t.trade_id.value,
+                "order_id": t.order_id.value,
+                "symbol": t.symbol.value,
+                "side": t.side.value,
+                "price": str(t.price.value),
+                "quantity": str(t.quantity.value),
+                "fee": str(t.fee) if t.fee is not None else None,
+                "fee_asset": t.fee_asset,
+                "timestamp": t.timestamp.value.isoformat(),
+                "timestamp_ms": int(t.timestamp.value.timestamp() * 1000),
+            }
+            for t in trades
+        ]
+        await self._redis.connect()
+        try:
+            await self._redis.append_trades(records)
+        finally:
+            await self._redis.close()
 
 
 def _normalize_balances(
