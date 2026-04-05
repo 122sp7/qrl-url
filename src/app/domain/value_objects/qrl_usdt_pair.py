@@ -1,5 +1,5 @@
 class QrlUsdtPair:
-    """QRL/USDT 專用交易對，不允許動態建構."""
+    """QRL/USDT 專用交易對,不允許動態建構."""
 
     SYMBOL = "QRLUSDT"
     BASE = "QRL"

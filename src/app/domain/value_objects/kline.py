@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.app.domain.value_objects.timestamp import Timestamp
@@ -26,7 +26,7 @@ class KLine:
             raise ValueError("KLine interval is required")
 
     @classmethod
-    def from_raw(
+    def from_raw(  # noqa: PLR0913
         cls,
         open_price: Decimal,
         high: Decimal,
@@ -36,5 +36,5 @@ class KLine:
         interval: str,
         timestamp_ms: int,
     ) -> "KLine":
-        ts = Timestamp(datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc))
+        ts = Timestamp(datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC))
         return cls(open=open_price, high=high, low=low, close=close, volume=volume, interval=interval, timestamp=ts)

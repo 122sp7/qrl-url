@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from src.app.domain.value_objects.balance import Balance
 from src.app.domain.value_objects.timestamp import Timestamp
 

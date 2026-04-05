@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Iterable
 
 from src.app.domain.entities.trading_pair import TradingPair
 from src.app.domain.value_objects.kline import KLine
@@ -27,8 +27,8 @@ class MexcApiClient:
         bid = Decimal(payload.get("bidPrice", "0"))
         ask = Decimal(payload.get("askPrice", "0"))
         last = Decimal(payload.get("lastPrice", payload.get("last", "0")))
-        ts_value = payload.get("closeTime") or payload.get("close_time") or int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-        timestamp = Timestamp(datetime.fromtimestamp(int(ts_value) / 1000, tz=timezone.utc))
+        ts_value = payload.get("closeTime") or payload.get("close_time") or int(datetime.now(tz=UTC).timestamp() * 1000)
+        timestamp = Timestamp(datetime.fromtimestamp(int(ts_value) / 1000, tz=UTC))
         return Price(bid=bid, ask=ask, last=last, timestamp=timestamp)
 
     async def get_klines(self, pair: TradingPair, interval: str, limit: int = 100) -> list[KLine]:

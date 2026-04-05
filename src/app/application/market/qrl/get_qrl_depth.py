@@ -1,5 +1,5 @@
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.application.market.use_cases.get_depth import _serialize_depth
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.domain.value_objects.symbol import Symbol
 
 

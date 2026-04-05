@@ -1,7 +1,7 @@
 """System use case to expose an allocation trigger for schedulers."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,8 +16,8 @@ from src.app.domain.services.slippage_analyzer import SlippageAnalyzer
 from src.app.domain.services.valuation_service import ValuationService
 from src.app.domain.value_objects.balance_comparison_result import BalanceComparisonResult
 from src.app.domain.value_objects.normalized_balances import NormalizedBalances
-from src.app.domain.value_objects.order_command import OrderCommand
 from src.app.domain.value_objects.order_book import OrderBook
+from src.app.domain.value_objects.order_command import OrderCommand
 from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.price import Price
 from src.app.domain.value_objects.quantity import Quantity
@@ -77,7 +77,7 @@ class AllocationUseCase:
     async def execute(self) -> AllocationResult:
         """Compare balances, evaluate depth/slippage, and submit a balancing order."""
         request_id = str(uuid4())
-        executed_at = datetime.now(timezone.utc)
+        executed_at = datetime.now(UTC)
         async with self._exchange_factory() as svc:
             account = await svc.get_account()
             try:

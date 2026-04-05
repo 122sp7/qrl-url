@@ -1,5 +1,5 @@
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
 
 from src.app.domain.entities.order import Order
 from src.app.domain.entities.trade import Trade
@@ -22,11 +22,11 @@ def map_rest_order_dto_to_domain(dto: dict) -> Order:
         price=Decimal(str(dto.get("price", "0"))),
         quantity=Quantity(Decimal(str(dto.get("origQty", "0")))),
         created_at=Timestamp(
-            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=timezone.utc)
+            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=UTC)
         ),
         updated_at=Timestamp(
             datetime.fromtimestamp(
-                int(dto.get("updateTime", dto.get("time", 0))) / 1000, tz=timezone.utc
+                int(dto.get("updateTime", dto.get("time", 0))) / 1000, tz=UTC
             )
         )
         if dto.get("updateTime")
@@ -46,6 +46,6 @@ def map_rest_trade_dto_to_domain(dto: dict) -> Trade:
         fee=Decimal(str(dto["commission"])) if dto.get("commission") is not None else None,
         fee_asset=str(dto["commissionAsset"]) if dto.get("commissionAsset") else None,
         timestamp=Timestamp(
-            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=timezone.utc)
+            datetime.fromtimestamp(int(dto.get("time", 0)) / 1000, tz=UTC)
         ),
     )

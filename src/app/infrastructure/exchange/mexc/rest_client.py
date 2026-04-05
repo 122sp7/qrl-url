@@ -76,7 +76,7 @@ class MexcRestClient:
     async def get_account(self) -> dict[str, Any]:
         return await self._request("GET", "/api/v3/account", signed=True)
 
-    async def create_order(
+    async def create_order(  # noqa: PLR0913
         self,
         *,
         symbol: str,

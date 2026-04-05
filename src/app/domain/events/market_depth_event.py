@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Tuple
 
 from app.domain.value_objects.price import Price
 from app.domain.value_objects.quantity import Quantity
@@ -17,8 +16,8 @@ class MarketDepthEvent:
     """
 
     symbol: Symbol
-    bids: List[Tuple[Price, Quantity]]
-    asks: List[Tuple[Price, Quantity]]
+    bids: list[tuple[Price, Quantity]]
+    asks: list[tuple[Price, Quantity]]
     event_type: str | None
     from_version: str | None
     to_version: str | None

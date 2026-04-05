@@ -1,4 +1,4 @@
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 
 
 class MexcWebSocketClient:
@@ -10,7 +10,7 @@ class MexcWebSocketClient:
     """
 
     async def subscribe(
-        self, channel: str, symbol: Optional[str] = None
+        self, channel: str, symbol: str | None = None
     ) -> AsyncIterator[object]:
         """
         Yield raw protobuf messages for the given channel.

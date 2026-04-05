@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from src.app.domain.aggregates.account_state import AccountState
 from src.app.domain.aggregates.market_snapshot import MarketSnapshot
@@ -16,7 +16,7 @@ from src.app.domain.value_objects.timestamp import Timestamp
 
 
 def _ts_now() -> Timestamp:
-    return Timestamp(datetime.now(timezone.utc))
+    return Timestamp(datetime.now(UTC))
 
 
 def build_account_state(

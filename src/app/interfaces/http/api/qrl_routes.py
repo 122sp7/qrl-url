@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from src.app.application.account.use_cases.get_balance import GetBalanceUseCase
 from src.app.application.market.qrl.get_qrl_depth import GetQrlDepth
 from src.app.application.market.qrl.get_qrl_kline import GetQrlKline
 from src.app.application.market.qrl.get_qrl_price import GetQrlPrice
@@ -10,7 +11,6 @@ from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.application.trading.qrl.cancel_qrl_order import CancelQrlOrder
 from src.app.application.trading.qrl.get_qrl_order import GetQrlOrder
 from src.app.application.trading.qrl.place_qrl_order import PlaceQrlOrder
-from src.app.application.account.use_cases.get_balance import GetBalanceUseCase
 from src.app.application.trading.use_cases.list_orders import ListOrdersUseCase
 from src.app.application.trading.use_cases.list_trades import ListTradesUseCase
 from src.app.interfaces.http.dependencies import get_exchange_factory

@@ -19,6 +19,6 @@ class GetStats24hUseCase:
     def __init__(self, exchange_factory: ExchangeServiceFactory):
         self._exchange_factory = exchange_factory
 
-    async def execute(self, data: GetStats24hInput | None = None) -> dict:
+    async def execute(self, data: GetStats24hInput | None = None) -> dict:  # noqa: ARG002
         async with self._exchange_factory() as exchange:
             return await exchange.get_ticker_24h(Symbol("QRLUSDT"))

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
 
 from src.app.domain.value_objects.symbol import Symbol
 
@@ -21,4 +21,4 @@ class Ticker:
         if self.bid_price > self.ask_price:
             raise ValueError("Bid price cannot exceed ask price")
         if self.ts.tzinfo is None:
-            object.__setattr__(self, "ts", self.ts.replace(tzinfo=timezone.utc))
+            object.__setattr__(self, "ts", self.ts.replace(tzinfo=UTC))

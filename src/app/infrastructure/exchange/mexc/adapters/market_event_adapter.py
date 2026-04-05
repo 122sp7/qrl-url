@@ -1,4 +1,4 @@
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from app.application.ports.exchange_gateway import ExchangeGateway
 from app.domain.events.balance_event import BalanceEvent
@@ -13,10 +13,11 @@ from app.infrastructure.exchange.mexc.generated import (
     PublicDealsV3Api_pb2,
 )
 from app.infrastructure.exchange.mexc.ws.mexc_ws_client import MexcWebSocketClient
+
 from .balance_mapper import balance_proto_to_domain
+from .depth_mapper import depth_proto_to_domain
 from .order_mapper import order_proto_to_domain
 from .trade_mapper import trade_proto_to_domain
-from .depth_mapper import depth_proto_to_domain
 
 
 class MexcExchangeGateway(ExchangeGateway):

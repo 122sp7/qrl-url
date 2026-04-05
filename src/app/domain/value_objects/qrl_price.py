@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_DOWN, getcontext
+from decimal import ROUND_DOWN, Decimal, getcontext
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class QrlPrice:
     def __repr__(self) -> str:
         return f"QrlPrice({self._value})"
 
-    def multiply(self, quantity: "QrlQuantity") -> Decimal:
+    def multiply(self, quantity: QrlQuantity) -> Decimal:
         return (self._value * quantity.value).quantize(
             Decimal("0.00000001"), rounding=ROUND_DOWN
         )

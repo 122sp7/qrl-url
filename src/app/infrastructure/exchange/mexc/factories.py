@@ -6,29 +6,29 @@ that aggregate construction paths are present and wired, while allowing the
 future work to enrich the mapping with full business rules.
 """
 
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Iterable, Optional
 
 from src.app.domain.aggregates.account_state import AccountState
 from src.app.domain.aggregates.market_snapshot import MarketSnapshot
 from src.app.domain.aggregates.trading_session import TradingSession
-from src.app.domain.factories.aggregates import (
-    build_account_state,
-    build_market_snapshot,
-    build_trading_session,
-)
 from src.app.domain.entities.account import Account
 from src.app.domain.entities.kline import Kline
 from src.app.domain.entities.order import Order
 from src.app.domain.entities.order_book_level import OrderBookLevel
 from src.app.domain.entities.trade import Trade
+from src.app.domain.factories.aggregates import (
+    build_account_state,
+    build_market_snapshot,
+    build_trading_session,
+)
 from src.app.domain.value_objects.balance import Balance
 from src.app.domain.value_objects.kline_interval import KlineInterval
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_side import OrderSide
-from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.order_status import OrderStatus
+from src.app.domain.value_objects.order_type import OrderType
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.ticker import Ticker
@@ -37,19 +37,19 @@ from src.app.domain.value_objects.trade_id import TradeId
 from src.app.infrastructure.exchange.mexc.generated import (
     PrivateAccountV3Api_pb2,
     PrivateOrdersV3Api_pb2,
-    PublicAggreDepthsV3Api_pb2,
     PublicAggreDealsV3Api_pb2,
+    PublicAggreDepthsV3Api_pb2,
     PublicBookTickerV3Api_pb2,
     PublicSpotKlineV3Api_pb2,
 )
 
 
 def _default_timestamp() -> Timestamp:
-    return Timestamp(datetime.now(timezone.utc))
+    return Timestamp(datetime.now(UTC))
 
 
 def _levels_from_depth(
-    depth: Optional[PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api],
+    depth: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api | None,
 ) -> tuple[list[OrderBookLevel], list[OrderBookLevel]]:
     if depth is None:
         return [], []
@@ -75,9 +75,9 @@ def _levels_from_depth(
 
 def market_snapshot_from_sources(
     symbol: Symbol,
-    depth_proto: Optional[PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api] = None,
-    trades: Optional[Iterable[Trade]] = None,
-    ticker_proto: Optional[PublicBookTickerV3Api_pb2.PublicBookTickerV3Api] = None,
+    depth_proto: PublicAggreDepthsV3Api_pb2.PublicAggreDepthsV3Api | None = None,
+    trades: Iterable[Trade] | None = None,
+    ticker_proto: PublicBookTickerV3Api_pb2.PublicBookTickerV3Api | None = None,
 ) -> MarketSnapshot:
     """
     Build a MarketSnapshot aggregate from available feed DTOs.
@@ -139,7 +139,7 @@ def account_state_from_proto(
 
 
 def trading_session_from_orders(
-    symbol: Symbol, orders: Optional[Iterable[Order]] = None, trades: Optional[Iterable[Trade]] = None
+    symbol: Symbol, orders: Iterable[Order] | None = None, trades: Iterable[Trade] | None = None
 ) -> TradingSession:
     """Create a TradingSession aggregate from existing order/trade records."""
 
@@ -147,7 +147,7 @@ def trading_session_from_orders(
 
 
 def trades_from_public_proto(
-    symbol: Symbol, deals_proto: Optional[PublicAggreDealsV3Api_pb2.PublicAggreDealsV3Api] = None
+    symbol: Symbol, deals_proto: PublicAggreDealsV3Api_pb2.PublicAggreDealsV3Api | None = None
 ) -> list[Trade]:
     """Convert public trades DTO to domain trades (skeleton mapping)."""
 
@@ -175,7 +175,7 @@ def trades_from_public_proto(
 
 
 def klines_from_proto(
-    symbol: Symbol, kline_proto: Optional[PublicSpotKlineV3Api_pb2.PublicSpotKlineV3Api] = None
+    symbol: Symbol, kline_proto: PublicSpotKlineV3Api_pb2.PublicSpotKlineV3Api | None = None
 ) -> list[Kline]:
     """Convert spot kline DTOs to domain klines (skeleton mapping)."""
 
@@ -196,15 +196,15 @@ def klines_from_proto(
                 low=Decimal(str(getattr(item, "low", 0))),
                 close=Decimal(str(getattr(item, "close", 0))),
                 volume=Decimal(str(getattr(item, "volume", 0))),
-                open_time=Timestamp(datetime.fromtimestamp(open_time_ms / 1000, tz=timezone.utc)),
-                close_time=Timestamp(datetime.fromtimestamp(close_time_ms / 1000, tz=timezone.utc)),
+                open_time=Timestamp(datetime.fromtimestamp(open_time_ms / 1000, tz=UTC)),
+                close_time=Timestamp(datetime.fromtimestamp(close_time_ms / 1000, tz=UTC)),
             )
         )
     return klines
 
 
 def orders_from_private_proto(
-    symbol: Symbol, orders_proto: Optional[PrivateOrdersV3Api_pb2.PrivateOrdersV3Api] = None
+    symbol: Symbol, orders_proto: PrivateOrdersV3Api_pb2.PrivateOrdersV3Api | None = None
 ) -> list[Order]:
     """Convert private orders DTO to domain orders (skeleton mapping)."""
 

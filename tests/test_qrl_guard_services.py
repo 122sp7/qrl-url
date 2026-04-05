@@ -23,7 +23,7 @@ def test_ensure_price_range_out_of_bounds_raises() -> None:
     price = QrlPrice("0.9999")
     min_price = QrlPrice("1.0000")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="below allowed threshold"):
         ensure_price_range(price, min_allowed=min_price)
 
 
@@ -31,7 +31,7 @@ def test_ensure_price_range_above_max_raises() -> None:
     price = QrlPrice("2.0001")
     max_price = QrlPrice("2.0000")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="above allowed threshold"):
         ensure_price_range(price, max_allowed=max_price)
 
 
@@ -40,12 +40,12 @@ def test_ensure_sufficient_balance_passes_when_funded() -> None:
 
 
 def test_ensure_sufficient_balance_raises_when_insufficient() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Insufficient USDT"):
         ensure_sufficient_balance(Decimal("1.0"), Decimal("2.0"))
 
 
 def test_prevent_duplicate_raises_on_existing_id() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Duplicate clientOrderId"):
         prevent_duplicate("abc", existing_ids={"abc", "other"})
 
 
@@ -54,7 +54,7 @@ def test_prevent_duplicate_allows_new_id() -> None:
 
 
 def test_enforce_rate_limit_raises_on_limit_exceeded() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Rate limit"):
         enforce_rate_limit(0)
 
 

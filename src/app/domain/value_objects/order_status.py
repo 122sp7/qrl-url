@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -7,7 +10,7 @@ class OrderStatus:
 
     value: str
 
-    _allowed = {
+    _allowed: ClassVar[set[str]] = {
         "NEW",
         "PARTIALLY_FILLED",
         "FILLED",

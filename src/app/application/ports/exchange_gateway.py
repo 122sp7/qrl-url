@@ -1,9 +1,10 @@
-from typing import AsyncIterator, Protocol
+from collections.abc import AsyncIterator
+from typing import Protocol
 
-from app.domain.events.market_depth_event import MarketDepthEvent
-from app.domain.events.trade_event import TradeEvent
-from app.domain.events.order_event import OrderEvent
 from app.domain.events.balance_event import BalanceEvent
+from app.domain.events.market_depth_event import MarketDepthEvent
+from app.domain.events.order_event import OrderEvent
+from app.domain.events.trade_event import TradeEvent
 from app.domain.value_objects.symbol import Symbol
 
 

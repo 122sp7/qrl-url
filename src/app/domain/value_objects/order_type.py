@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -7,7 +10,7 @@ class OrderType:
 
     value: str
 
-    _allowed = {"LIMIT", "MARKET"}
+    _allowed: ClassVar[set[str]] = {"LIMIT", "MARKET"}
 
     def __post_init__(self):
         if self.value not in self._allowed:

@@ -29,7 +29,7 @@ class QrlRestClient:
     async def market_trades(self, *, limit: int = 50) -> list:
         return await self._client.trades(symbol=QrlUsdtPair.symbol(), limit=limit)
 
-    async def create_order(
+    async def create_order(  # noqa: PLR0913
         self,
         *,
         side: str,

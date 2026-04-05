@@ -5,7 +5,6 @@ from src.app.application.trading.use_cases.get_kline import GetKlineUseCase
 from src.app.application.trading.use_cases.get_price import GetPriceUseCase
 from src.app.interfaces.http.dependencies import get_exchange_factory
 
-
 router = APIRouter()
 
 

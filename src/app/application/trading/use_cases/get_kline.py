@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.domain.value_objects.kline import KLine
@@ -22,7 +21,7 @@ def _serialize_kline(k: KLine) -> dict:
 class GetKlineUseCase:
     exchange_factory: ExchangeServiceFactory
 
-    async def execute(self, symbol: str, interval: str, limit: int = 100) -> List[dict]:
+    async def execute(self, symbol: str, interval: str, limit: int = 100) -> list[dict]:
         async with self.exchange_factory() as exchange:
             klines = await exchange.get_kline(Symbol(symbol), interval=interval, limit=limit)
         return [_serialize_kline(k) for k in klines]

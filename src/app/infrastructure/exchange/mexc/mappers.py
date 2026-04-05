@@ -1,6 +1,6 @@
 """Mapping helpers between MEXC API payloads and domain objects."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -12,13 +12,13 @@ from src.app.domain.value_objects.order_book import DepthLevel, OrderBook
 from src.app.domain.value_objects.order_id import OrderId
 from src.app.domain.value_objects.order_status import OrderStatus
 from src.app.domain.value_objects.order_type import OrderType
+from src.app.domain.value_objects.qrl_price import QrlPrice
 from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.time_in_force import TimeInForce
 from src.app.domain.value_objects.timestamp import Timestamp
 from src.app.domain.value_objects.trade_id import TradeId
-from src.app.domain.value_objects.qrl_price import QrlPrice
 
 
 def _to_decimal(value: Any) -> Decimal:
@@ -33,7 +33,7 @@ def _to_timestamp_from_ms(value: int | float | str) -> Timestamp:
             ms_value = int(value)
         except (TypeError, ValueError):
             ms_value = 0
-    dt = datetime.fromtimestamp(ms_value / 1000, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ms_value / 1000, tz=UTC)
     return Timestamp(dt)
 
 
@@ -104,7 +104,7 @@ def _parse_levels(raw: Any) -> list[DepthLevel]:
     if not isinstance(raw, list):
         return levels
     for item in raw:
-        if not isinstance(item, (list, tuple)) or len(item) < 2:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:  # noqa: PLR2004
             continue
         try:
             price = _to_decimal(item[0])

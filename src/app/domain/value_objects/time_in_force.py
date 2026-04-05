@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -7,7 +10,7 @@ class TimeInForce:
 
     value: str
 
-    _allowed = {"GTC", "IOC", "FOK"}
+    _allowed: ClassVar[set[str]] = {"GTC", "IOC", "FOK"}
 
     def __post_init__(self):
         if self.value not in self._allowed:

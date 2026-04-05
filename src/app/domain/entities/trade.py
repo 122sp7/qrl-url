@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from src.app.domain.value_objects.order_id import OrderId
+from src.app.domain.value_objects.qrl_price import QrlPrice
+from src.app.domain.value_objects.quantity import Quantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.symbol import Symbol
 from src.app.domain.value_objects.timestamp import Timestamp
 from src.app.domain.value_objects.trade_id import TradeId
-from src.app.domain.value_objects.qrl_price import QrlPrice
-from src.app.domain.value_objects.quantity import Quantity
 
 
 @dataclass

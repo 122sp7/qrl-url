@@ -1,5 +1,7 @@
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import AsyncContextManager, Callable, Protocol
+from typing import Protocol
 
 from src.app.domain.entities.account import Account
 from src.app.domain.entities.order import Order
@@ -40,7 +42,7 @@ class GetOrderRequest:
     client_order_id: str | None = None
 
 
-class ExchangeService(Protocol, AsyncContextManager["ExchangeService"]):
+class ExchangeService(Protocol, AbstractAsyncContextManager["ExchangeService"]):
     """Application port exposing required exchange operations."""
 
     async def get_server_time(self) -> Timestamp: ...

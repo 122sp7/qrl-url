@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
+
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
 from src.app.application.trading.use_cases.cancel_order import CancelOrderInput, CancelOrderUseCase
 from src.app.application.trading.use_cases.get_order import GetOrderInput, GetOrderUseCase
@@ -11,7 +12,6 @@ from src.app.interfaces.http.dependencies import get_exchange_factory
 from src.app.interfaces.http.schemas import (
     PlaceOrderRequest,
 )
-
 
 router = APIRouter()
 

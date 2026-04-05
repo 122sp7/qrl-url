@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from src.app.domain.value_objects.timestamp import Timestamp
@@ -21,5 +21,5 @@ class Price:
     @classmethod
     def from_single(cls, value: Decimal, ts: datetime | None = None) -> "Price":
         """Construct a Price when only a single quote is available."""
-        stamp = Timestamp(ts or datetime.now(timezone.utc))
+        stamp = Timestamp(ts or datetime.now(UTC))
         return cls(bid=value, ask=value, last=value, timestamp=stamp)

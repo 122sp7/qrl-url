@@ -1,0 +1,37 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "N", "W", "UP", "B", "A", "C4", "DTZ",
+    "T10", "ISC", "ICN", "PIE", "PT", "Q", "SIM", "ARG",
+    "ERA", "PD", "PL", "NPY", "RUF",
+]
+# B008: FastAPI's Depends() in default arguments is the canonical DI pattern.
+# Suppressing globally because it applies to every route handler in this project.
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Protobuf generated files must never be manually edited.
+# All lint categories that protoc output naturally violates are suppressed here.
+"src/app/infrastructure/exchange/mexc/generated/**" = [
+    "E402",   # imports not at top — protobuf conditional setup precedes imports
+    "E501",   # binary descriptor strings exceed line length
+    "ERA001", # protobuf comment headers look like commented-out code
+    "F401",   # cross-module imports are used at runtime via protobuf reflection
+    "N999",   # PascalCase_pb2 filenames are protoc convention
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true

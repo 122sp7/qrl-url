@@ -18,7 +18,7 @@ class PlaceQrlOrder:
     def __init__(self, exchange_factory: ExchangeServiceFactory):
         self._exchange_factory = exchange_factory
 
-    async def execute(
+    async def execute(  # noqa: PLR0913
         self,
         *,
         side: str,

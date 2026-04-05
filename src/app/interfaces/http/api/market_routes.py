@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, Query
 
 from src.app.application.market.use_cases.get_depth import GetDepthInput, GetDepthUseCase
 from src.app.application.market.use_cases.get_kline import GetKlineInput, GetKlineUseCase
-from src.app.application.market.use_cases.get_market_trades import GetMarketTradesInput, GetMarketTradesUseCase
+from src.app.application.market.use_cases.get_market_trades import (
+    GetMarketTradesInput,
+    GetMarketTradesUseCase,
+)
 from src.app.application.market.use_cases.get_stats24h import GetStats24hUseCase
 from src.app.application.market.use_cases.get_ticker import GetTickerUseCase
 from src.app.application.ports.exchange_service import ExchangeServiceFactory
