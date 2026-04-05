@@ -627,6 +627,134 @@ async def dashboard(request: Request) -> HTMLResponse:
 })();
 ```
 
+## File: src/app/interfaces/http/pages/static/js/pages/dashboard.js
+```javascript
+(() => {
+  const cfg = window.dashboardConfig || {};
+  const ui = window.dashboardUI || {};
+  if (!ui.setPrice || !ui.setText) return;
+
+  const load = async (url) => {
+    const resp = await fetch(url);
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch (_err) {
+      data = {};
+    }
+    return { ok: resp.ok, data };
+  };
+
+  const err = (id, detail, fallback) => ui.setText(id, detail || fallback);
+
+  async function refresh() {
+    try {
+      const [price, kline, bal, depth, trades, orders] = await Promise.all([
+        load(cfg.priceUrl),
+        load(cfg.klineUrl),
+        load(cfg.balanceUrl),
+        load(cfg.depthUrl),
+        load(cfg.tradesUrl),
+        load(cfg.ordersUrl),
+      ]);
+      price.ok ? ui.setPrice(price.data) : err("price-error", price.data.detail, "價格取得失敗");
+      kline.ok && ui.setKlines(kline.data);
+      bal.ok ? ui.setBalances(bal.data) : err("balance-error", bal.data.detail, "餘額取得失敗");
+      depth.ok ? ui.setDepth(depth.data) : err("depth-error", depth.data.detail, "Depth 取得失敗");
+      trades.ok ? ui.setTrades(trades.data) : err("trades-error", trades.data.detail, "Trades 取得失敗");
+      orders.ok ? ui.setOrders(orders.data) : err("orders-error", orders.data.detail, "Orders 取得失敗");
+    } catch (ex) {
+      ["price", "balance", "depth", "trades", "orders"].forEach((key) => err(`${key}-error`, null, "連線錯誤"));
+      console.error(ex);
+    }
+  }
+
+  const wireSideToggle = () => {
+    document.querySelectorAll(".side-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".side-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const sideInput = document.querySelector('input[name="side"]');
+        if (sideInput) sideInput.value = btn.dataset.side;
+      });
+    });
+  };
+
+  const wireOrderForm = () => {
+    const form = document.getElementById("orderForm");
+    const resultEl = document.getElementById("orderResult");
+    if (!form || !resultEl) return;
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        symbol: "QRLUSDT",
+        side: form.side.value,
+        order_type: form.order_type.value,
+        quantity: form.quantity.value,
+        price: form.price.value || null,
+        time_in_force: form.time_in_force.value,
+      };
+      resultEl.textContent = "送出中...";
+      try {
+        const resp = await fetch(cfg.orderUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json().catch(() => ({}));
+        resultEl.textContent = resp.ok
+          ? `成功: orderId=${data.order_id || data.orderId || "N/A"}`
+          : `失敗: ${data.detail || JSON.stringify(data)}`;
+      } catch (ex) {
+        resultEl.textContent = `錯誤: ${ex}`;
+      }
+    });
+  };
+
+  const cancelOrder = async (orderId, button) => {
+    if (!orderId || !cfg.ordersUrl) return;
+    const url = `${cfg.ordersUrl}/${encodeURIComponent(orderId)}/cancel`;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "取消中...";
+    try {
+      const resp = await fetch(url, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        err("orders-error", data.detail, "取消失敗");
+      } else {
+        ui.setText("orders-error", "");
+        refresh();
+      }
+    } catch (ex) {
+      err("orders-error", String(ex), "取消失敗");
+    } finally {
+      button.disabled = false;
+      button.textContent = originalText || "取消";
+    }
+  };
+
+  const wireOrderActions = () => {
+    const list = document.getElementById("orders-list");
+    if (!list) return;
+    list.addEventListener("click", (event) => {
+      const button = event.target.closest(".order-cancel");
+      if (!button) return;
+      const orderId = button.dataset.orderId;
+      cancelOrder(orderId, button);
+    });
+  };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    wireSideToggle();
+    wireOrderForm();
+    wireOrderActions();
+    refresh();
+    setInterval(refresh, cfg.refreshMs || 10000);
+  });
+})();
+```
+
 ## File: src/app/interfaces/tasks/__init__.py
 ```python
 """Task interfaces placeholder."""
@@ -3102,6 +3230,90 @@ class MexcWebSocketClient:
         raise NotImplementedError("WebSocket transport not wired yet.")
 ```
 
+## File: src/app/infrastructure/external/redis_client.py
+```python
+"""Redis client backed by Redis Cloud (redis.asyncio)."""
+
+import json
+import os
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
+
+import redis.asyncio as aioredis
+
+
+def _redis_url() -> str:
+    url = os.environ.get("REDIS_URL", "")
+    if not url:
+        raise RuntimeError("REDIS_URL environment variable is not set")
+    return url
+
+
+class RedisClient:
+    """Thin async wrapper around redis.asyncio for caching and sorted-set operations."""
+
+    def __init__(self, url: str | None = None):
+        self._url = url or _redis_url()
+        self._redis: aioredis.Redis | None = None
+
+    async def connect(self) -> None:
+        self._redis = aioredis.from_url(self._url, decode_responses=True)
+
+    async def close(self) -> None:
+        if self._redis:
+            await self._redis.aclose()
+            self._redis = None
+
+    def _r(self) -> aioredis.Redis:
+        if self._redis is None:
+            raise RuntimeError("RedisClient not connected")
+        return self._redis
+
+    # ------------------------------------------------------------------
+    # Simple key/value cache
+    # ------------------------------------------------------------------
+
+    async def set_json(self, key: str, value: Any, ttl_seconds: int) -> None:
+        await self._r().setex(key, ttl_seconds, json.dumps(value))
+
+    async def get_json(self, key: str) -> Any | None:
+        raw = await self._r().get(key)
+        return json.loads(raw) if raw is not None else None
+
+    # ------------------------------------------------------------------
+    # Sorted Set for trade history
+    # ------------------------------------------------------------------
+
+    TRADES_KEY = "trades:QRLUSDT"
+    TRADES_RETENTION_MS = 90 * 24 * 60 * 60 * 1000  # 90 days in milliseconds
+
+    async def append_trades(self, trades: list[dict]) -> None:
+        """ZADD trades with score=timestamp_ms, then trim older than 90 days."""
+        if not trades:
+            return
+        r = self._r()
+        mapping = {json.dumps(t, sort_keys=True): t["timestamp_ms"] for t in trades}
+        await r.zadd(self.TRADES_KEY, mapping)
+        cutoff = max(t["timestamp_ms"] for t in trades) - self.TRADES_RETENTION_MS
+        await r.zremrangebyscore(self.TRADES_KEY, "-inf", cutoff)
+
+    async def list_trades(self, limit: int = 200) -> list[dict]:
+        """Return the most recent N trades from the sorted set."""
+        r = self._r()
+        raw_list = await r.zrange(self.TRADES_KEY, 0, limit - 1, rev=True)
+        return [json.loads(raw) for raw in raw_list]
+
+
+@asynccontextmanager
+async def get_redis_client(url: str | None = None) -> AsyncIterator[RedisClient]:
+    client = RedisClient(url)
+    await client.connect()
+    try:
+        yield client
+    finally:
+        await client.close()
+```
+
 ## File: src/app/interfaces/http/api/account_routes.py
 ```python
 from fastapi import APIRouter, Depends, HTTPException
@@ -3179,392 +3391,6 @@ async def order_stream(websocket: WebSocket):
     usecase = ListOrdersUseCase(exchange_factory)
     await usecase.execute()  # TODO: stream data
     await websocket.close()
-```
-
-## File: src/app/interfaces/http/dependencies.py
-```python
-"""FastAPI dependency providers for interface layer."""
-
-from src.app.application.ports.exchange_service import ExchangeServiceFactory
-from src.app.infrastructure.exchange.mexc.service import build_mexc_exchange_service
-from src.app.infrastructure.exchange.mexc.settings import MexcSettings
-
-
-def build_exchange_factory(settings: MexcSettings | None = None) -> ExchangeServiceFactory:
-    """Return a factory that builds a fresh exchange adapter per request."""
-
-    def factory():
-        return build_mexc_exchange_service(settings or MexcSettings())
-
-    return factory
-
-
-def get_exchange_factory() -> ExchangeServiceFactory:
-    """Default dependency for constructing exchange adapters."""
-
-    return build_exchange_factory()
-```
-
-## File: src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js
-```javascript
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const setText = (id, v = "") => {
-    const el = $(id);
-    if (el) el.textContent = v;
-  };
-
-  const chartEl = $("klineChart");
-  const chart =
-    window.Chart && chartEl
-      ? new Chart(chartEl.getContext("2d"), {
-          type: "line",
-          data: { labels: [], datasets: [{ data: [], borderColor: "#2196f3", fill: false, tension: 0.2 }] },
-        })
-      : { data: { labels: [], datasets: [{ data: [] }] }, update() {} };
-
-  const setPrice = (d) => {
-    setText("price-error", "");
-    setText("bid", d?.bid ?? "--");
-    setText("ask", d?.ask ?? "--");
-    setText("last", d?.last ?? "--");
-    const raw = d?.timestamp;
-    const parsed = typeof raw === "number" || typeof raw === "string" ? new Date(raw) : new Date();
-    setText("timestamp", parsed.toISOString());
-  };
-
-  const setKlines = (items = []) => {
-    chart.data.labels = items.map((k) => new Date(k.timestamp).toLocaleTimeString());
-    chart.data.datasets[0].data = items.map((k) => Number(k.close));
-    chart.update();
-  };
-
-  const setBalances = (payload = {}) => {
-    setText("balance-error", "");
-    const balances = payload.balances || [];
-    const byAsset = (asset) => balances.find((b) => b.asset === asset) || { free: "--", locked: "--" };
-    const qrl = byAsset("QRL");
-    const usdt = byAsset("USDT");
-    setText("bal-qrl-free", qrl.free);
-    setText("bal-qrl-locked", qrl.locked);
-    setText("bal-usdt-free", usdt.free);
-    setText("bal-usdt-locked", usdt.locked);
-  };
-
-  const normalizeDepth = (item) => (Array.isArray(item) ? { price: item[0], qty: item[1] } : { price: item?.price ?? item?.p ?? "--", qty: item?.quantity ?? item?.q ?? "--" });
-
-  const setDepth = (payload = {}) => {
-    setText("depth-error", "");
-    const bidsEl = $("depth-bids");
-    const asksEl = $("depth-asks");
-    const build = (items = []) =>
-      items
-        .slice(0, 10)
-        .map((entry) => {
-          const { price, qty } = normalizeDepth(entry);
-          return `<li><span class="price">${price}</span><span class="qty">${qty}</span></li>`;
-        })
-        .join("");
-    if (bidsEl) bidsEl.innerHTML = build(payload.bids);
-    if (asksEl) asksEl.innerHTML = build(payload.asks);
-  };
-
-  const normalizeTrade = (t = {}) => {
-    const side = t.side ?? (t.isBuyerMaker === true ? "SELL" : t.isBuyerMaker === false ? "BUY" : "--");
-    const tsRaw = t.timestamp ?? t.time ?? Date.now();
-    return { price: t.price ?? t.p ?? "--", qty: t.quantity ?? t.q ?? "--", side, ts: typeof tsRaw === "string" ? tsRaw : new Date(tsRaw).toISOString() };
-  };
-
-  const setTrades = (payload = []) => {
-    setText("trades-error", "");
-    const el = $("trades-list");
-    if (!el) return;
-    el.innerHTML = payload
-      .slice(0, 20)
-      .map((t) => {
-        const n = normalizeTrade(t);
-        return `<li><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="ts">${n.ts}</span></li>`;
-      })
-      .join("");
-  };
-
-  const formatAmount = (price, qty, quote) => {
-    if (quote !== undefined && quote !== null) return quote;
-    const p = Number(price);
-    const q = Number(qty);
-    return Number.isFinite(p) && Number.isFinite(q) ? (p * q).toFixed(4) : "--";
-  };
-
-  const normalizeOrder = (o = {}) => {
-    const status = (o.status ?? "--").toString().toUpperCase();
-    const price = o.price ?? o.limit_price ?? o.avg_price ?? "--";
-    const qty = o.quantity ?? o.orig_qty ?? "--";
-    const quote =
-      o.cumulative_quote_quantity ??
-      o.cum_quote_quantity ??
-      o.cumulative_quote_qty ??
-      o.cummulativeQuoteQty ??
-      undefined;
-    return {
-      side: o.side ?? "--",
-      status,
-      price,
-      qty,
-      amount: formatAmount(price, qty, quote),
-      id: o.order_id ?? o.orderId ?? "--",
-      canCancel: !["CANCELED", "FILLED", "REJECTED", "EXPIRED"].includes(status),
-    };
-  };
-
-  const setOrders = (payload = []) => {
-    setText("orders-error", "");
-    const el = $("orders-list");
-    if (!el) return;
-    const header =
-      '<li class="orders-header"><span class="id">訂單ID</span><span class="side">方向</span><span class="price">價格</span><span class="qty">數量</span><span class="amount">金額</span><span class="status">狀態</span><span class="action">操作</span></li>';
-    el.innerHTML =
-      header +
-      payload
-        .slice(0, 20)
-        .map((o) => {
-          const n = normalizeOrder(o);
-          const action = n.canCancel
-            ? `<button class="order-cancel" data-order-id="${n.id}" aria-label="取消訂單 ${n.id}">取消</button>`
-            : `<span class="status-label">${n.status}</span>`;
-          return `<li data-order-id="${n.id}"><span class="id">${n.id}</span><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="amount">${n.amount}</span><span class="status">${n.status}</span><span class="action">${action}</span></li>`;
-        })
-        .join("");
-  };
-
-  window.dashboardUI = { setText, setPrice, setKlines, setBalances, setDepth, setTrades, setOrders };
-})();
-```
-
-## File: src/app/interfaces/http/pages/static/js/pages/dashboard.js
-```javascript
-(() => {
-  const cfg = window.dashboardConfig || {};
-  const ui = window.dashboardUI || {};
-  if (!ui.setPrice || !ui.setText) return;
-
-  const load = async (url) => {
-    const resp = await fetch(url);
-    let data = {};
-    try {
-      data = await resp.json();
-    } catch (_err) {
-      data = {};
-    }
-    return { ok: resp.ok, data };
-  };
-
-  const err = (id, detail, fallback) => ui.setText(id, detail || fallback);
-
-  async function refresh() {
-    try {
-      const [price, kline, bal, depth, trades, orders] = await Promise.all([
-        load(cfg.priceUrl),
-        load(cfg.klineUrl),
-        load(cfg.balanceUrl),
-        load(cfg.depthUrl),
-        load(cfg.tradesUrl),
-        load(cfg.ordersUrl),
-      ]);
-      price.ok ? ui.setPrice(price.data) : err("price-error", price.data.detail, "價格取得失敗");
-      kline.ok && ui.setKlines(kline.data);
-      bal.ok ? ui.setBalances(bal.data) : err("balance-error", bal.data.detail, "餘額取得失敗");
-      depth.ok ? ui.setDepth(depth.data) : err("depth-error", depth.data.detail, "Depth 取得失敗");
-      trades.ok ? ui.setTrades(trades.data) : err("trades-error", trades.data.detail, "Trades 取得失敗");
-      orders.ok ? ui.setOrders(orders.data) : err("orders-error", orders.data.detail, "Orders 取得失敗");
-    } catch (ex) {
-      ["price", "balance", "depth", "trades", "orders"].forEach((key) => err(`${key}-error`, null, "連線錯誤"));
-      console.error(ex);
-    }
-  }
-
-  const wireSideToggle = () => {
-    document.querySelectorAll(".side-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".side-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        const sideInput = document.querySelector('input[name="side"]');
-        if (sideInput) sideInput.value = btn.dataset.side;
-      });
-    });
-  };
-
-  const wireOrderForm = () => {
-    const form = document.getElementById("orderForm");
-    const resultEl = document.getElementById("orderResult");
-    if (!form || !resultEl) return;
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const payload = {
-        symbol: "QRLUSDT",
-        side: form.side.value,
-        order_type: form.order_type.value,
-        quantity: form.quantity.value,
-        price: form.price.value || null,
-        time_in_force: form.time_in_force.value,
-      };
-      resultEl.textContent = "送出中...";
-      try {
-        const resp = await fetch(cfg.orderUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await resp.json().catch(() => ({}));
-        resultEl.textContent = resp.ok
-          ? `成功: orderId=${data.order_id || data.orderId || "N/A"}`
-          : `失敗: ${data.detail || JSON.stringify(data)}`;
-      } catch (ex) {
-        resultEl.textContent = `錯誤: ${ex}`;
-      }
-    });
-  };
-
-  const cancelOrder = async (orderId, button) => {
-    if (!orderId || !cfg.ordersUrl) return;
-    const url = `${cfg.ordersUrl}/${encodeURIComponent(orderId)}/cancel`;
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = "取消中...";
-    try {
-      const resp = await fetch(url, { method: "POST" });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        err("orders-error", data.detail, "取消失敗");
-      } else {
-        ui.setText("orders-error", "");
-        refresh();
-      }
-    } catch (ex) {
-      err("orders-error", String(ex), "取消失敗");
-    } finally {
-      button.disabled = false;
-      button.textContent = originalText || "取消";
-    }
-  };
-
-  const wireOrderActions = () => {
-    const list = document.getElementById("orders-list");
-    if (!list) return;
-    list.addEventListener("click", (event) => {
-      const button = event.target.closest(".order-cancel");
-      if (!button) return;
-      const orderId = button.dataset.orderId;
-      cancelOrder(orderId, button);
-    });
-  };
-
-  document.addEventListener("DOMContentLoaded", () => {
-    wireSideToggle();
-    wireOrderForm();
-    wireOrderActions();
-    refresh();
-    setInterval(refresh, cfg.refreshMs || 10000);
-  });
-})();
-```
-
-## File: src/app/interfaces/http/pages/templates/dashboard/index.html
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>QRL/USDT Dashboard</title>
-<link rel="stylesheet" href="/static/css/dashboard.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-<a href="#maincontent" class="skip-link">Skip to content</a>
-<main id="maincontent" class="dashboard-grid">
-<div class="card price-card">
-<div class="price-row"><span class="label">買價</span><span id="bid" class="value">--</span></div>
-<div class="price-row"><span class="label">賣價</span><span id="ask" class="value">--</span></div>
-<div class="price-row"><span class="label">最新價</span><span id="last" class="value">--</span></div>
-<div class="price-row"><span class="label">更新時間</span><span id="timestamp" class="value">--</span></div>
-<div class="price-row error" id="price-error" aria-live="polite"></div>
-</div>
-<div class="card kline-card">
-<canvas id="klineChart" height="240"></canvas>
-</div>
-<div class="card depth-card">
-<h2>深度</h2>
-<div class="vertical-stack">
-<div class="label">賣盤</div>
-<ul id="depth-asks" class="depth-list"></ul>
-<div class="label">買盤</div>
-<ul id="depth-bids" class="depth-list"></ul>
-</div>
-<div class="price-row error" id="depth-error" aria-live="polite"></div>
-</div>
-<div class="card trades-card">
-<h2>近期成交</h2>
-<ul id="trades-list" class="trades-list"></ul>
-<div class="price-row error" id="trades-error" aria-live="polite"></div>
-</div>
-<div class="card orders-card">
-<h2>我的訂單</h2>
-<ul id="orders-list" class="orders-list"></ul>
-<div class="price-row error" id="orders-error" aria-live="polite"></div>
-</div>
-<div class="card balance-card">
-<h2>餘額</h2>
-<div class="price-row"><span class="label">QRL 可用</span><span id="bal-qrl-free" class="value">--</span></div>
-<div class="price-row"><span class="label">QRL 凍結</span><span id="bal-qrl-locked" class="value">--</span></div>
-<div class="price-row"><span class="label">USDT 可用</span><span id="bal-usdt-free" class="value">--</span></div>
-<div class="price-row"><span class="label">USDT 凍結</span><span id="bal-usdt-locked" class="value">--</span></div>
-<div class="price-row error" id="balance-error" aria-live="polite"></div>
-</div>
-<div class="card order-card">
-<h2>下單</h2>
-<form id="orderForm">
-<div class="form-row">
-<label>方向</label>
-<div class="side-toggle" role="group" aria-label="Side">
-<button type="button" data-side="BUY" class="side-btn active">買入</button>
-<button type="button" data-side="SELL" class="side-btn">賣出</button>
-</div>
-<input type="hidden" name="side" value="BUY" />
-</div>
-<div class="form-row">
-<label>類型</label>
-<select name="order_type">
-<option value="LIMIT">LIMIT</option>
-<option value="MARKET">MARKET</option>
-</select>
-</div>
-<div class="form-row">
-<label>數量</label>
-<input name="quantity" type="number" step="0.0001" required />
-</div>
-<div class="form-row">
-<label>價格</label>
-<input name="price" type="number" step="0.0001" />
-</div>
-<div class="form-row">
-<label>有效期限</label>
-<select name="time_in_force">
-<option value="GTC">GTC</option>
-<option value="IOC">IOC</option>
-<option value="FOK">FOK</option>
-</select>
-</div>
-<button type="submit">送出</button>
-<div id="orderResult" class="order-result"></div>
-</form>
-</div>
-</main>
-<script id="dashboard-config" type="application/json">{{ dashboard_config | tojson }}</script>
-<script src="/static/js/pages/dashboard-config.js" defer></script>
-<script src="/static/js/domain/order.js" defer></script>
-<script src="/static/js/pages/dashboard-renderers.js" defer></script>
-<script src="/static/js/pages/dashboard.js" defer></script>
-</body>
-</html>
 ```
 
 ## File: src/app/interfaces/tasks/entrypoints.py
@@ -4471,6 +4297,131 @@ def trade_proto_to_domain(
     )
 ```
 
+## File: src/app/infrastructure/exchange/mexc/cached_service.py
+```python
+"""Write-through cached wrapper around MexcExchangeService."""
+
+import json
+from decimal import Decimal
+
+from src.app.application.ports.exchange_service import (
+    CancelOrderRequest,
+    ExchangeService,
+    GetOrderRequest,
+    PlaceOrderRequest,
+)
+from src.app.domain.entities.account import Account
+from src.app.domain.entities.order import Order
+from src.app.domain.entities.trade import Trade
+from src.app.domain.value_objects.order_book import OrderBook
+from src.app.domain.value_objects.price import Price
+from src.app.domain.value_objects.symbol import Symbol
+from src.app.domain.value_objects.timestamp import Timestamp
+from src.app.infrastructure.exchange.mexc.service import MexcExchangeService
+from src.app.infrastructure.external.redis_client import RedisClient
+
+
+class CachedMexcExchangeService(ExchangeService):
+    """MexcExchangeService with Redis write-through cache for public market data."""
+
+    _TTL_PRICE = 8
+    _TTL_DEPTH = 8
+    _TTL_KLINE = 30
+    _TTL_MARKET_TRADES = 8
+
+    def __init__(self, inner: MexcExchangeService, redis: RedisClient):
+        self._inner = inner
+        self._redis = redis
+
+    async def __aenter__(self) -> "CachedMexcExchangeService":
+        await self._inner.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self._inner.__aexit__(exc_type, exc, tb)
+
+    # ------------------------------------------------------------------
+    # Passthrough — no caching
+    # ------------------------------------------------------------------
+
+    async def get_server_time(self) -> Timestamp:
+        return await self._inner.get_server_time()
+
+    async def get_account(self) -> Account:
+        return await self._inner.get_account()
+
+    async def place_order(self, request: PlaceOrderRequest) -> Order:
+        return await self._inner.place_order(request)
+
+    async def cancel_order(self, request: CancelOrderRequest) -> Order:
+        return await self._inner.cancel_order(request)
+
+    async def get_order(self, request: GetOrderRequest) -> Order:
+        return await self._inner.get_order(request)
+
+    async def list_open_orders(self, symbol: Symbol | None = None) -> list[Order]:
+        return await self._inner.list_open_orders(symbol)
+
+    async def list_trades(self, symbol: Symbol) -> list[Trade]:
+        return await self._inner.list_trades(symbol)
+
+    async def get_ticker_24h(self, symbol: Symbol) -> dict:
+        return await self._inner.get_ticker_24h(symbol)
+
+    # ------------------------------------------------------------------
+    # Write-through cached
+    # ------------------------------------------------------------------
+
+    async def get_price(self, symbol: Symbol) -> Price:
+        result = await self._inner.get_price(symbol)
+        await self._redis.set_json(
+            f"price:{symbol.value}",
+            {"bid": str(result.bid), "ask": str(result.ask)},
+            self._TTL_PRICE,
+        )
+        return result
+
+    async def get_depth(self, symbol: Symbol, limit: int = 50) -> OrderBook:
+        result = await self._inner.get_depth(symbol, limit)
+        await self._redis.set_json(
+            f"depth:{symbol.value}",
+            {
+                "bids": [{"price": str(lvl.price), "quantity": str(lvl.quantity)} for lvl in result.bids],
+                "asks": [{"price": str(lvl.price), "quantity": str(lvl.quantity)} for lvl in result.asks],
+            },
+            self._TTL_DEPTH,
+        )
+        return result
+
+    async def get_kline(self, symbol: Symbol, interval: str, limit: int = 100):
+        result = await self._inner.get_kline(symbol, interval, limit)
+        await self._redis.set_json(
+            f"kline:{symbol.value}:{interval}",
+            [
+                [
+                    int(k.timestamp.value.timestamp() * 1000),
+                    str(k.open),
+                    str(k.high),
+                    str(k.low),
+                    str(k.close),
+                    str(k.volume),
+                ]
+                for k in result
+            ],
+            self._TTL_KLINE,
+        )
+        return result
+
+    async def get_market_trades(self, symbol: Symbol, limit: int = 50) -> list[dict]:
+        result = await self._inner.get_market_trades(symbol, limit)
+        await self._redis.set_json(
+            f"market_trades:{symbol.value}",
+            result,
+            self._TTL_MARKET_TRADES,
+        )
+        return result
+```
+
 ## File: src/app/infrastructure/exchange/mexc/rest_client.py
 ```python
 import hashlib
@@ -4747,6 +4698,242 @@ async def trigger_allocation() -> AllocationResponse:
 async def trigger_allocation_api() -> AllocationResponse:
     """API-aligned alias to trigger allocation under the /api/tasks namespace."""
     return await _trigger_allocation()
+```
+
+## File: src/app/interfaces/http/dependencies.py
+```python
+"""FastAPI dependency providers for interface layer."""
+
+import os
+
+from src.app.application.ports.exchange_service import ExchangeServiceFactory
+from src.app.infrastructure.exchange.mexc.cached_service import CachedMexcExchangeService
+from src.app.infrastructure.exchange.mexc.service import MexcExchangeService, build_mexc_exchange_service
+from src.app.infrastructure.exchange.mexc.settings import MexcSettings
+from src.app.infrastructure.external.redis_client import RedisClient
+
+
+def build_exchange_factory(settings: MexcSettings | None = None) -> ExchangeServiceFactory:
+    """Return a factory that builds a fresh exchange adapter per request.
+
+    When REDIS_URL is configured, wraps the service with write-through cache.
+    """
+    resolved = settings or MexcSettings()
+    redis_url = os.environ.get("REDIS_URL", "")
+
+    if redis_url:
+        redis = RedisClient(redis_url)
+
+        async def _connect_and_return():
+            await redis.connect()
+            return redis
+
+        def factory():
+            inner = build_mexc_exchange_service(resolved)
+            redis_client = RedisClient(redis_url)
+            return _CachedServiceContext(inner, redis_client)
+
+        return factory
+
+    def factory():  # type: ignore[no-redef]
+        return build_mexc_exchange_service(resolved)
+
+    return factory
+
+
+class _CachedServiceContext:
+    """Async context manager combining CachedMexcExchangeService with a per-request Redis client."""
+
+    def __init__(self, inner: MexcExchangeService, redis: RedisClient):
+        self._inner = inner
+        self._redis = redis
+        self._service: CachedMexcExchangeService | None = None
+
+    async def __aenter__(self) -> CachedMexcExchangeService:
+        await self._redis.connect()
+        self._service = CachedMexcExchangeService(self._inner, self._redis)
+        await self._service.__aenter__()
+        return self._service
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._service:
+            await self._service.__aexit__(exc_type, exc, tb)
+        await self._redis.close()
+
+
+def get_exchange_factory() -> ExchangeServiceFactory:
+    """Default dependency for constructing exchange adapters."""
+
+    return build_exchange_factory()
+```
+
+## File: src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js
+```javascript
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const setText = (id, v = "") => {
+    const el = $(id);
+    if (el) el.textContent = v;
+  };
+
+  const chartEl = $("klineChart");
+  const chart =
+    window.Chart && chartEl
+      ? new Chart(chartEl.getContext("2d"), {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [{ label: "QRL/USDT", data: [], borderColor: "#9f6431", backgroundColor: "rgba(159, 100, 49, 0.12)", fill: true, tension: 0.28, pointRadius: 0, borderWidth: 2 }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false,
+              },
+            },
+            scales: {
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  maxTicksLimit: 8,
+                  color: "#6f6559",
+                },
+              },
+              y: {
+                ticks: {
+                  color: "#6f6559",
+                },
+                grid: {
+                  color: "rgba(78, 57, 34, 0.08)",
+                },
+              },
+            },
+          },
+        })
+      : { data: { labels: [], datasets: [{ data: [] }] }, update() {} };
+
+  const setPrice = (d) => {
+    setText("price-error", "");
+    setText("bid", d?.bid ?? "--");
+    setText("ask", d?.ask ?? "--");
+    setText("last", d?.last ?? "--");
+    const raw = d?.timestamp;
+    const parsed = typeof raw === "number" || typeof raw === "string" ? new Date(raw) : new Date();
+    setText("timestamp", parsed.toISOString());
+  };
+
+  const setKlines = (items = []) => {
+    chart.data.labels = items.map((k) => new Date(k.timestamp).toLocaleTimeString());
+    chart.data.datasets[0].data = items.map((k) => Number(k.close));
+    chart.update();
+  };
+
+  const setBalances = (payload = {}) => {
+    setText("balance-error", "");
+    const balances = payload.balances || [];
+    const byAsset = (asset) => balances.find((b) => b.asset === asset) || { free: "--", locked: "--" };
+    const qrl = byAsset("QRL");
+    const usdt = byAsset("USDT");
+    setText("bal-qrl-free", qrl.free);
+    setText("bal-qrl-locked", qrl.locked);
+    setText("bal-usdt-free", usdt.free);
+    setText("bal-usdt-locked", usdt.locked);
+    const valuation = payload.valuation || {};
+    const totalVal = valuation.total_value_usdt;
+    setText("bal-total-value", totalVal != null ? parseFloat(totalVal).toFixed(4) + " USDT" : "--");
+  };
+
+  const normalizeDepth = (item) => (Array.isArray(item) ? { price: item[0], qty: item[1] } : { price: item?.price ?? item?.p ?? "--", qty: item?.quantity ?? item?.q ?? "--" });
+
+  const setDepth = (payload = {}) => {
+    setText("depth-error", "");
+    const bidsEl = $("depth-bids");
+    const asksEl = $("depth-asks");
+    const build = (items = []) =>
+      items
+        .slice(0, 10)
+        .map((entry) => {
+          const { price, qty } = normalizeDepth(entry);
+          return `<li><span class="price">${price}</span><span class="qty">${qty}</span></li>`;
+        })
+        .join("");
+    if (bidsEl) bidsEl.innerHTML = build(payload.bids);
+    if (asksEl) asksEl.innerHTML = build(payload.asks);
+  };
+
+  const normalizeTrade = (t = {}) => {
+    const side = t.side ?? (t.isBuyerMaker === true ? "SELL" : t.isBuyerMaker === false ? "BUY" : "--");
+    const tsRaw = t.timestamp ?? t.time ?? Date.now();
+    return { price: t.price ?? t.p ?? "--", qty: t.quantity ?? t.q ?? "--", side, ts: typeof tsRaw === "string" ? tsRaw : new Date(tsRaw).toISOString() };
+  };
+
+  const setTrades = (payload = []) => {
+    setText("trades-error", "");
+    const el = $("trades-list");
+    if (!el) return;
+    el.innerHTML = payload
+      .slice(0, 20)
+      .map((t) => {
+        const n = normalizeTrade(t);
+        return `<li><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="ts">${n.ts}</span></li>`;
+      })
+      .join("");
+  };
+
+  const formatAmount = (price, qty, quote) => {
+    if (quote !== undefined && quote !== null) return quote;
+    const p = Number(price);
+    const q = Number(qty);
+    return Number.isFinite(p) && Number.isFinite(q) ? (p * q).toFixed(4) : "--";
+  };
+
+  const normalizeOrder = (o = {}) => {
+    const status = (o.status ?? "--").toString().toUpperCase();
+    const price = o.price ?? o.limit_price ?? o.avg_price ?? "--";
+    const qty = o.quantity ?? o.orig_qty ?? "--";
+    const quote =
+      o.cumulative_quote_quantity ??
+      o.cum_quote_quantity ??
+      o.cumulative_quote_qty ??
+      o.cummulativeQuoteQty ??
+      undefined;
+    return {
+      side: o.side ?? "--",
+      status,
+      price,
+      qty,
+      amount: formatAmount(price, qty, quote),
+      id: o.order_id ?? o.orderId ?? "--",
+      canCancel: !["CANCELED", "FILLED", "REJECTED", "EXPIRED"].includes(status),
+    };
+  };
+
+  const setOrders = (payload = []) => {
+    setText("orders-error", "");
+    const el = $("orders-list");
+    if (!el) return;
+    const header =
+      '<li class="orders-header"><span class="id">訂單ID</span><span class="side">方向</span><span class="price">價格</span><span class="qty">數量</span><span class="amount">金額</span><span class="status">狀態</span><span class="action">操作</span></li>';
+    el.innerHTML =
+      header +
+      payload
+        .slice(0, 20)
+        .map((o) => {
+          const n = normalizeOrder(o);
+          const action = n.canCancel
+            ? `<button class="order-cancel" data-order-id="${n.id}" aria-label="取消訂單 ${n.id}">取消</button>`
+            : `<span class="status-label">${n.status}</span>`;
+          return `<li data-order-id="${n.id}"><span class="id">${n.id}</span><span class="side ${n.side === "BUY" ? "buy" : "sell"}">${n.side}</span><span class="price">${n.price}</span><span class="qty">${n.qty}</span><span class="amount">${n.amount}</span><span class="status">${n.status}</span><span class="action">${action}</span></li>`;
+        })
+        .join("");
+  };
+
+  window.dashboardUI = { setText, setPrice, setKlines, setBalances, setDepth, setTrades, setOrders };
+})();
 ```
 
 ## File: src/app/application/trading/use_cases/list_trades.py
@@ -5491,9 +5678,179 @@ class PlaceOrderUseCase:
         return _serialize_order(order)
 ```
 
+## File: src/app/interfaces/http/pages/templates/dashboard/index.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QRL/USDT Dashboard</title>
+<link rel="stylesheet" href="/static/css/dashboard.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<a href="#maincontent" class="skip-link">Skip to content</a>
+<main id="maincontent" class="page-shell">
+<header class="page-header">
+<div>
+<p class="eyebrow">MEXC Spot Dashboard</p>
+<h1>QRL / USDT 交易看板</h1>
+<p class="page-subtitle">上面先看價格、資產、成交與掛單，下面直接進入 K 線與深度下單區，操作路徑更短。</p>
+</div>
+</header>
+
+<section class="summary-grid" aria-label="摘要資訊區">
+<div class="card market-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Market Snapshot</p>
+<h2>即時價格</h2>
+</div>
+</div>
+<div class="metric-stack">
+<div class="metric-row"><span class="label">買價</span><span id="bid" class="value">--</span></div>
+<div class="metric-row"><span class="label">賣價</span><span id="ask" class="value">--</span></div>
+<div class="metric-row metric-row-strong"><span class="label">最新價</span><span id="last" class="value">--</span></div>
+<div class="metric-row metric-row-dim"><span class="label">更新時間</span><span id="timestamp" class="value">--</span></div>
+<div class="status-line error" id="price-error" aria-live="polite"></div>
+</div>
+</div>
+
+<div class="card balance-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Wallet</p>
+<h2>餘額</h2>
+</div>
+</div>
+<div class="metric-stack">
+<div class="metric-row"><span class="label">QRL 可用</span><span id="bal-qrl-free" class="value">--</span></div>
+<div class="metric-row"><span class="label">QRL 凍結</span><span id="bal-qrl-locked" class="value">--</span></div>
+<div class="metric-row"><span class="label">USDT 可用</span><span id="bal-usdt-free" class="value">--</span></div>
+<div class="metric-row"><span class="label">USDT 凍結</span><span id="bal-usdt-locked" class="value">--</span></div>
+<div class="metric-row metric-row-strong"><span class="label">總值 (USDT)</span><span id="bal-total-value" class="value">--</span></div>
+<div class="status-line error" id="balance-error" aria-live="polite"></div>
+</div>
+</div>
+
+<div class="card trades-card compact-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Tape</p>
+<h2>近期成交</h2>
+</div>
+</div>
+<ul id="trades-list" class="trades-list"></ul>
+<div class="status-line error" id="trades-error" aria-live="polite"></div>
+</div>
+
+<div class="card orders-card compact-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Working Orders</p>
+<h2>我的訂單</h2>
+</div>
+</div>
+<ul id="orders-list" class="orders-list"></ul>
+<div class="status-line error" id="orders-error" aria-live="polite"></div>
+</div>
+</section>
+
+<section class="workspace-grid" aria-label="主要交易區">
+<div class="card chart-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Price Action</p>
+<h2>一分鐘 K 線</h2>
+</div>
+</div>
+<div class="chart-wrap">
+<canvas id="klineChart" height="320" aria-label="QRL USDT kline chart"></canvas>
+</div>
+</div>
+
+<aside class="card depth-card">
+<div class="card-head">
+<div>
+<p class="section-kicker">Order Book</p>
+<h2>深度與下單</h2>
+</div>
+</div>
+<div class="depth-trade-layout">
+<section class="book-panel" aria-labelledby="asks-heading">
+<h3 id="asks-heading">賣盤</h3>
+<ul id="depth-asks" class="depth-list"></ul>
+ </section>
+
+<section class="order-panel" aria-labelledby="order-panel-heading">
+<div class="order-panel-head">
+<h3 id="order-panel-heading">快速下單</h3>
+<p>直接插在盤面中間，切 side 後就能下。</p>
+</div>
+<form id="orderForm" class="order-form compact-order-form">
+<div class="form-row form-row-stack">
+<label for="order-side-group">方向</label>
+<div id="order-side-group" class="side-toggle" role="group" aria-label="Side">
+<button type="button" data-side="BUY" class="side-btn active">買入</button>
+<button type="button" data-side="SELL" class="side-btn">賣出</button>
+</div>
+<input type="hidden" name="side" value="BUY" />
+</div>
+<div class="order-inline-grid">
+<div class="form-row form-row-stack">
+<label for="order-type">類型</label>
+<select id="order-type" name="order_type">
+<option value="LIMIT">LIMIT</option>
+<option value="MARKET">MARKET</option>
+</select>
+</div>
+<div class="form-row form-row-stack">
+<label for="order-time-in-force">期限</label>
+<select id="order-time-in-force" name="time_in_force">
+<option value="GTC">GTC</option>
+<option value="IOC">IOC</option>
+<option value="FOK">FOK</option>
+</select>
+</div>
+</div>
+<div class="order-inline-grid">
+<div class="form-row form-row-stack">
+<label for="order-quantity">數量</label>
+<input id="order-quantity" name="quantity" type="number" step="0.0001" required />
+</div>
+<div class="form-row form-row-stack">
+<label for="order-price">價格</label>
+<input id="order-price" name="price" type="number" step="0.0001" />
+</div>
+</div>
+<button type="submit" class="primary-action">送出委託</button>
+<div id="orderResult" class="order-result"></div>
+</form>
+</section>
+
+<section class="book-panel" aria-labelledby="bids-heading">
+<h3 id="bids-heading">買盤</h3>
+<ul id="depth-bids" class="depth-list"></ul>
+</section>
+</div>
+<div class="status-line error" id="depth-error" aria-live="polite"></div>
+</aside>
+</section>
+</main>
+<script id="dashboard-config" type="application/json">{{ dashboard_config | tojson }}</script>
+<script src="/static/js/pages/dashboard-config.js" defer></script>
+<script src="/static/js/domain/order.js" defer></script>
+<script src="/static/js/pages/dashboard-renderers.js" defer></script>
+<script src="/static/js/pages/dashboard.js" defer></script>
+</body>
+</html>
+```
+
 ## File: src/app/interfaces/http/api/qrl_routes.py
 ```python
 import asyncio
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -5513,10 +5870,38 @@ from src.app.domain.value_objects.qrl_price import QrlPrice
 from src.app.domain.value_objects.qrl_quantity import QrlQuantity
 from src.app.domain.value_objects.side import Side
 from src.app.domain.value_objects.time_in_force import TimeInForce
+from src.app.infrastructure.external.redis_client import RedisClient
 from src.app.interfaces.http.dependencies import get_exchange_factory
 from src.app.interfaces.http.schemas import PlaceOrderRequest
 
 router = APIRouter()
+
+
+async def _trades_from_redis(limit: int = 200) -> list[dict] | None:
+    """Return trades from Redis Sorted Set, or None if REDIS_URL not configured."""
+    redis_url = os.environ.get("REDIS_URL", "")
+    if not redis_url:
+        return None
+    client = RedisClient(redis_url)
+    await client.connect()
+    try:
+        return await client.list_trades(limit)
+    finally:
+        await client.close()
+
+
+@router.get("/trades")
+async def qrl_trades(
+    limit: int = Query(default=200, ge=1, le=500),
+    exchange_factory: ExchangeServiceFactory = Depends(get_exchange_factory),
+):
+    """Return myTrades from Redis when available, falling back to MEXC."""
+    cached = await _trades_from_redis(limit)
+    if cached is not None:
+        return cached
+    usecase = ListTradesUseCase(exchange_factory)
+    return await usecase.execute(symbol="QRLUSDT")
+
 
 
 @router.get("/price")
@@ -5609,20 +5994,23 @@ async def qrl_summary(
     depth_uc = GetQrlDepth(exchange_factory, limit=depth_limit)
     balance_uc = GetBalanceUseCase(exchange_factory)
     orders_uc = ListOrdersUseCase(exchange_factory)
-    trades_uc = ListTradesUseCase(exchange_factory)
     market_trades_uc = GetMarketTradesUseCase(exchange_factory)
 
     (
-        price_result, kline_result, depth_result, balance_result, orders, trades, market_trades
+        price_result, kline_result, depth_result, balance_result, orders, market_trades
     ) = await asyncio.gather(
         price_uc.execute(),
         kline_uc.execute(),
         depth_uc.execute(),
         balance_uc.execute(),
         orders_uc.execute(symbol="QRLUSDT"),
-        trades_uc.execute("QRLUSDT"),
         market_trades_uc.execute(),
     )
+
+    cached_trades = await _trades_from_redis(trades_limit)
+    if cached_trades is None:
+        trades_uc = ListTradesUseCase(exchange_factory)
+        cached_trades = await trades_uc.execute("QRLUSDT")
 
     normalized_klines = [
         {
@@ -5637,7 +6025,7 @@ async def qrl_summary(
         "depth": depth_result,
         "balance": balance_result,
         "orders": orders,
-        "trades": trades,
+        "trades": cached_trades,
         "market_trades": market_trades[:trades_limit],
     }
 ```
@@ -5781,6 +6169,7 @@ def order_book_from_api(payload: dict[str, Any]) -> OrderBook:
 ```python
 """System use case to expose an allocation trigger for schedulers."""
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -5790,6 +6179,7 @@ from src.app.application.ports.exchange_service import (
     ExchangeServiceFactory,
     PlaceOrderRequest,
 )
+from src.app.infrastructure.external.redis_client import RedisClient
 from src.app.domain.entities.account import Account
 from src.app.domain.services.balance_comparison_rule import BalanceComparisonRule
 from src.app.domain.services.depth_calculator import DepthCalculator
@@ -5856,6 +6246,8 @@ class AllocationUseCase:
         self._depth_limit = depth_limit
         self._target_quantity = target_quantity or AllocationConfig.TARGET_QUANTITY
         self._limit_price = Decimal(limit_price)
+        redis_url = os.environ.get("REDIS_URL", "")
+        self._redis: RedisClient | None = RedisClient(redis_url) if redis_url else None
 
     async def execute(self) -> AllocationResult:
         """Compare balances, evaluate depth/slippage, and submit a balancing order."""
@@ -5921,6 +6313,9 @@ class AllocationUseCase:
                     time_in_force=command.time_in_force,
                 )
             )
+            my_trades = await svc.list_trades(AllocationConfig.SYMBOL)
+
+        await self._persist_trades(my_trades, executed_at)
 
         return _result_from_success(
             request_id=request_id,
@@ -5929,6 +6324,30 @@ class AllocationUseCase:
             side=command.side,
             order_id=order.order_id.value,
         )
+
+    async def _persist_trades(self, trades, executed_at: datetime) -> None:
+        if self._redis is None or not trades:
+            return
+        records = [
+            {
+                "trade_id": t.trade_id.value,
+                "order_id": t.order_id.value,
+                "symbol": t.symbol.value,
+                "side": t.side.value,
+                "price": str(t.price.value),
+                "quantity": str(t.quantity.value),
+                "fee": str(t.fee) if t.fee is not None else None,
+                "fee_asset": t.fee_asset,
+                "timestamp": t.timestamp.value.isoformat(),
+                "timestamp_ms": int(t.timestamp.value.timestamp() * 1000),
+            }
+            for t in trades
+        ]
+        await self._redis.connect()
+        try:
+            await self._redis.append_trades(records)
+        finally:
+            await self._redis.close()
 
 
 def _normalize_balances(

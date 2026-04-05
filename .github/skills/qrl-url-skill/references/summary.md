@@ -37,24 +37,24 @@ This skill contains the following reference files:
 
 ## Statistics
 
-174 files | 5,324 lines
+176 files | 5,735 lines
 
 | Language | Files | Lines |
 |----------|------:|------:|
-| Python | 160 | 4,740 |
-| JavaScript | 11 | 299 |
+| Python | 162 | 5,047 |
+| JavaScript | 11 | 333 |
 | YAML | 1 | 152 |
-| HTML | 1 | 95 |
 | TOML | 1 | 38 |
+| HTML | 1 | 165 |
 
 **Largest files:**
+- `src/app/application/system/use_cases/allocation.py` (270 lines)
 - `src/app/infrastructure/exchange/mexc/factories.py` (241 lines)
-- `src/app/application/system/use_cases/allocation.py` (239 lines)
+- `src/app/interfaces/http/api/qrl_routes.py` (179 lines)
+- `src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js` (165 lines)
+- `src/app/interfaces/http/pages/templates/dashboard/index.html` (165 lines)
 - `src/app/infrastructure/exchange/mexc/rest_client.py` (156 lines)
 - `.serena/project.yml` (152 lines)
-- `src/app/interfaces/http/api/qrl_routes.py` (147 lines)
-- `src/app/interfaces/http/pages/static/js/pages/dashboard-renderers.js` (131 lines)
 - `src/app/infrastructure/exchange/mexc/mappers.py` (131 lines)
 - `src/app/interfaces/http/pages/static/js/pages/dashboard.js` (124 lines)
-- `src/app/infrastructure/exchange/mexc/service.py` (118 lines)
-- `src/app/application/account/use_cases/get_balance.py` (112 lines)
+- `src/app/infrastructure/exchange/mexc/cached_service.py` (121 lines)
